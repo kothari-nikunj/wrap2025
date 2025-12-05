@@ -483,6 +483,162 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .tap-hint {{ position:absolute; bottom:60px; font-size:16px; color:var(--muted); animation:pulse 2s infinite; }}
 @keyframes pulse {{ 0%,100%{{opacity:0.4}} 50%{{opacity:1}} }}
 
+/* === SLIDE ANIMATIONS === */
+/* Elements start hidden, animate when slide is active */
+.slide .slide-label,
+.slide .slide-text,
+.slide .slide-icon,
+.slide .big-number,
+.slide .huge-name,
+.slide .personality-type,
+.slide .roast,
+.slide .badge,
+.slide .stat-grid,
+.slide .rank-list,
+.slide .emoji-row,
+.slide h1,
+.slide .subtitle {{
+    opacity: 0;
+    transform: translateY(20px);
+}}
+
+.slide.active .slide-label {{
+    animation: fadeSlideUp 0.5s ease-out forwards;
+}}
+
+.slide.active .slide-icon {{
+    animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s forwards;
+}}
+
+.slide.active h1 {{
+    animation: fadeSlideUp 0.6s ease-out 0.15s forwards;
+}}
+
+.slide.active .subtitle {{
+    animation: fadeSlideUp 0.5s ease-out 0.3s forwards;
+}}
+
+.slide.active .slide-text {{
+    animation: fadeSlideUp 0.4s ease-out 0.2s forwards;
+}}
+
+.slide.active .big-number {{
+    animation: countReveal 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s forwards;
+}}
+
+.slide.active .huge-name {{
+    animation: nameReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+}}
+
+.slide.active .personality-type {{
+    animation: glitchReveal 0.8s ease-out 0.3s forwards;
+}}
+
+.slide.active .roast {{
+    animation: fadeSlideUp 0.5s ease-out 0.6s forwards;
+}}
+
+.slide.active .badge {{
+    animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards;
+}}
+
+.slide.active .stat-grid {{
+    animation: fadeSlideUp 0.5s ease-out 0.5s forwards;
+}}
+
+.slide.active .rank-list {{
+    animation: fadeIn 0.3s ease-out 0.3s forwards;
+}}
+
+.slide.active .rank-item {{
+    opacity: 0;
+    animation: rankCascade 0.4s ease-out forwards;
+}}
+
+.slide.active .rank-item:nth-child(1) {{ animation-delay: 0.35s; }}
+.slide.active .rank-item:nth-child(2) {{ animation-delay: 0.45s; }}
+.slide.active .rank-item:nth-child(3) {{ animation-delay: 0.55s; }}
+.slide.active .rank-item:nth-child(4) {{ animation-delay: 0.65s; }}
+.slide.active .rank-item:nth-child(5) {{ animation-delay: 0.75s; }}
+
+.slide.active .emoji-row {{
+    animation: emojiWave 0.8s ease-out 0.3s forwards;
+}}
+
+/* Summary card special treatment */
+.slide.active .summary-card {{
+    animation: cardReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+}}
+
+.slide.active .screenshot-btn {{
+    opacity: 0;
+    animation: fadeSlideUp 0.5s ease-out 0.8s forwards;
+}}
+
+.slide.active .share-hint {{
+    opacity: 0;
+    animation: fadeSlideUp 0.4s ease-out 1s forwards;
+}}
+
+/* Keyframes */
+@keyframes fadeSlideUp {{
+    from {{ opacity: 0; transform: translateY(20px); }}
+    to {{ opacity: 1; transform: translateY(0); }}
+}}
+
+@keyframes fadeIn {{
+    from {{ opacity: 0; }}
+    to {{ opacity: 1; }}
+}}
+
+@keyframes popIn {{
+    0% {{ opacity: 0; transform: translateY(20px) scale(0.8); }}
+    70% {{ transform: translateY(-5px) scale(1.1); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
+
+@keyframes countReveal {{
+    0% {{ opacity: 0; transform: translateY(30px) scale(0.9); }}
+    60% {{ transform: translateY(-8px) scale(1.02); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
+
+@keyframes nameReveal {{
+    0% {{ opacity: 0; transform: translateY(40px); }}
+    100% {{ opacity: 1; transform: translateY(0); }}
+}}
+
+@keyframes glitchReveal {{
+    0% {{ opacity: 0; transform: translateY(20px); filter: blur(8px); }}
+    20% {{ opacity: 0.5; transform: translateY(10px) skewX(-5deg); filter: blur(4px); }}
+    40% {{ opacity: 0.7; transform: translateY(5px) skewX(3deg); filter: blur(2px); }}
+    60% {{ opacity: 0.9; transform: translateY(-2px) skewX(-1deg); filter: blur(0); }}
+    80% {{ transform: translateY(1px) skewX(0.5deg); }}
+    100% {{ opacity: 1; transform: translateY(0) skewX(0); }}
+}}
+
+@keyframes badgePop {{
+    0% {{ opacity: 0; transform: translateY(10px) scale(0.8); }}
+    70% {{ transform: translateY(-3px) scale(1.1); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
+
+@keyframes rankCascade {{
+    0% {{ opacity: 0; transform: translateX(-30px); }}
+    100% {{ opacity: 1; transform: translateX(0); }}
+}}
+
+@keyframes emojiWave {{
+    0% {{ opacity: 0; transform: translateY(30px) scale(0.8); }}
+    50% {{ transform: translateY(-5px) scale(1.05); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
+
+@keyframes cardReveal {{
+    0% {{ opacity: 0; transform: translateY(40px) scale(0.95); }}
+    100% {{ opacity: 1; transform: translateY(0) scale(1); }}
+}}
+
 .summary-card {{
     background:linear-gradient(145deg,#1a1a2e 0%,#0f1a2e 100%);
     border:2px solid rgba(255,255,255,0.1);
@@ -557,13 +713,19 @@ for (let i = 0; i < total; i++) {{
 }}
 const dots = progressEl.querySelectorAll('.dot');
 
+const slides = gallery.querySelectorAll('.slide');
+
 function goTo(idx) {{
     if (idx < 0 || idx >= total) return;
+    // Remove active from all slides
+    slides.forEach(s => s.classList.remove('active'));
     current = idx;
     gallery.style.transform = `translateX(-${{current * 100}}vw)`;
     dots.forEach((d, i) => d.classList.toggle('active', i === current));
     prevBtn.classList.toggle('hidden', current === 0);
     nextBtn.classList.toggle('hidden', current === total - 1);
+    // Add active to current slide after a tiny delay for animation reset
+    setTimeout(() => slides[current].classList.add('active'), 50);
 }}
 
 document.addEventListener('click', (e) => {{
