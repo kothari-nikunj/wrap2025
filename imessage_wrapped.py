@@ -476,127 +476,7 @@ def gen_html(d, contacts, path):
             <div class="rank-list">{top5_html}</div>
         </div>''')
     
-    # Slide 6: Personality
-    slides.append(f'''
-    <div class="slide purple-bg">
-        <div class="slide-label">// DIAGNOSIS</div>
-        <div class="slide-text">texting personality</div>
-        <div class="personality-type">{ptype}</div>
-        <div class="roast">"{proast}"</div>
-    </div>''')
-    
-    # Slide 7: Conversation Starter
-    starter_label = "YOU START" if d['starter_pct'] > 50 else "THEY START"
-    starter_class = "green" if d['starter_pct'] > 50 else "yellow"
-    slides.append(f'''
-    <div class="slide">
-        <div class="slide-label">// WHO TEXTS FIRST</div>
-        <div class="slide-text">conversation initiator</div>
-        <div class="big-number {starter_class}">{d['starter_pct']}<span class="pct">%</span></div>
-        <div class="slide-text">of convos started by you</div>
-        <div class="badge {starter_class}">{starter_label}</div>
-    </div>''')
-    
-    # Slide 8: Busiest Day
-    if d['busiest_day']:
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// BUSIEST DAY</div>
-            <div class="slide-text">your most unhinged day</div>
-            <div class="big-number orange">{busiest_str}</div>
-            <div class="slide-text"><span class="yellow">{busiest_count:,}</span> messages in one day</div>
-            <div class="roast">what happened??</div>
-        </div>''')
-    
-    # Slide 9: 3AM Bestie
-    if d['late']:
-        ln = d['late'][0]
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// 3AM BESTIE</div>
-            <div class="slide-icon">🌙</div>
-            <div class="huge-name cyan">{n(ln[0])}</div>
-            <div class="big-number yellow">{ln[1]}</div>
-            <div class="slide-text">late night texts</div>
-        </div>''')
-    
-    # Slide 10: Peak hours
-    slides.append(f'''
-    <div class="slide">
-        <div class="slide-label">// PEAK HOURS</div>
-        <div class="slide-text">most active</div>
-        <div class="big-number green">{hr_str}</div>
-        <div class="slide-text">on <span class="yellow">{d['day']}s</span></div>
-    </div>''')
-    
-    # Slide 11: Heating Up
-    if d['heating']:
-        heat_html = ''.join([f'<div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">{n(h)}</span><span class="rank-count green">+{h2-h1}</span></div>' for h,h1,h2 in d['heating'][:5]])
-        slides.append(f'''
-        <div class="slide orange-bg">
-            <div class="slide-label">// HEATING UP</div>
-            <div class="slide-text">getting stronger in H2</div>
-            <div class="rank-list">{heat_html}</div>
-        </div>''')
-    
-    # Slide 12: Biggest fan
-    if d['fan']:
-        f = d['fan'][0]
-        ratio = round(f[1]/(f[2]+1), 1)
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// BIGGEST FAN</div>
-            <div class="slide-text">texts you most</div>
-            <div class="huge-name orange">{n(f[0])}</div>
-            <div class="slide-text"><span class="big-number yellow" style="font-size:56px">{ratio}x</span> more than you</div>
-        </div>''')
-    
-    # Slide 13: Down bad
-    if d['simp']:
-        si = d['simp'][0]
-        ratio = round(si[1]/(si[2]+1), 1)
-        slides.append(f'''
-        <div class="slide red-bg">
-            <div class="slide-label">// DOWN BAD</div>
-            <div class="slide-text">you simp for</div>
-            <div class="huge-name">{n(si[0])}</div>
-            <div class="slide-text">you text <span class="big-number yellow" style="font-size:56px">{ratio}x</span> more</div>
-        </div>''')
-    
-    # Slide 14: Ghosted
-    if d['ghosted']:
-        ghost_html = ''.join([f'<div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">{n(h)}</span><span class="rank-count"><span class="green">{b}</span>→<span class="red">{a}</span></span></div>' for h,b,a in d['ghosted'][:5]])
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// GHOSTED</div>
-            <div class="slide-text">they chose peace</div>
-            <div class="rank-list">{ghost_html}</div>
-            <div class="roast">before June → after</div>
-        </div>''')
-    
-    # Slide 15: Response time
-    resp_class = 'green' if d['resp'] < 10 else 'yellow' if d['resp'] < 60 else 'red'
-    resp_label = "INSTANT" if d['resp'] < 10 else "NORMAL" if d['resp'] < 60 else "SLOW"
-    slides.append(f'''
-    <div class="slide">
-        <div class="slide-label">// RESPONSE TIME</div>
-        <div class="slide-text">avg reply</div>
-        <div class="big-number {resp_class}">{d['resp']}</div>
-        <div class="slide-text">minutes</div>
-        <div class="badge {resp_class}">{resp_label}</div>
-    </div>''')
-    
-    # Slide 16: Emojis
-    if d['emoji'] and any(e[1] > 0 for e in d['emoji']):
-        emo = '  '.join([e[0] for e in d['emoji'] if e[1] > 0])
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// EMOJIS</div>
-            <div class="slide-text">your emotional range</div>
-            <div class="emoji-row">{emo}</div>
-        </div>''')
-
-    # === GROUP CHAT SLIDES ===
+    # === GROUP CHAT SLIDES (after top 5, before personality) ===
     gs = d['group_stats']
     if gs['count'] > 0:
         # Calculate lurker vs contributor ratio
@@ -604,21 +484,22 @@ def gen_html(d, contacts, path):
         lurker_label = "LURKER" if lurker_pct > 60 else "CONTRIBUTOR" if lurker_pct < 40 else "BALANCED"
         lurker_class = "yellow" if lurker_pct > 60 else "green" if lurker_pct < 40 else "cyan"
 
-        # Slide: Group Chat Overview
+        # Slide 6: Group Chat Overview
         slides.append(f'''
-        <div class="slide purple-bg">
+        <div class="slide">
             <div class="slide-label">// GROUP CHATS</div>
-            <div class="slide-text">you're in</div>
-            <div class="big-number cyan">{gs['count']}</div>
-            <div class="slide-text">group chats</div>
+            <div class="slide-icon">👥</div>
+            <div class="big-number green">{gs['count']}</div>
+            <div class="slide-text">active group chats</div>
             <div class="stat-grid">
-                <div class="stat-item"><span class="stat-num">{gs['total']:,}</span><span class="stat-lbl">messages</span></div>
-                <div class="stat-item"><span class="stat-num">{gs['sent']:,}</span><span class="stat-lbl">by you</span></div>
+                <div class="stat-item"><span class="stat-num">{gs['total']:,}</span><span class="stat-lbl">total msgs</span></div>
+                <div class="stat-item"><span class="stat-num">{gs['sent']:,}</span><span class="stat-lbl">sent</span></div>
+                <div class="stat-item"><span class="stat-num">{round(gs['sent']/max(gs['total'],1)*100)}%</span><span class="stat-lbl">yours</span></div>
             </div>
             <div class="badge {lurker_class}">{lurker_label}</div>
         </div>''')
 
-        # Slide: Group Chat Leaderboard
+        # Slide 7: Group Chat Leaderboard
         if d['group_leaderboard']:
             # Helper to format group name
             def format_group_name(gc):
@@ -638,11 +519,131 @@ def gen_html(d, contacts, path):
                 for i, gc in enumerate(d['group_leaderboard'][:5], 1)
             ])
             slides.append(f'''
-            <div class="slide">
+            <div class="slide orange-bg">
                 <div class="slide-label">// TOP GROUP CHATS</div>
-                <div class="slide-text">most active</div>
+                <div class="slide-text">your most active groups</div>
                 <div class="rank-list">{gc_html}</div>
             </div>''')
+
+    # Slide 8: Personality
+    slides.append(f'''
+    <div class="slide purple-bg">
+        <div class="slide-label">// DIAGNOSIS</div>
+        <div class="slide-text">texting personality</div>
+        <div class="personality-type">{ptype}</div>
+        <div class="roast">"{proast}"</div>
+    </div>''')
+
+    # Slide 9: Conversation Starter (Who texts first)
+    starter_label = "YOU START" if d['starter_pct'] > 50 else "THEY START"
+    starter_class = "green" if d['starter_pct'] > 50 else "yellow"
+    slides.append(f'''
+    <div class="slide">
+        <div class="slide-label">// WHO TEXTS FIRST</div>
+        <div class="slide-text">conversation initiator</div>
+        <div class="big-number {starter_class}">{d['starter_pct']}<span class="pct">%</span></div>
+        <div class="slide-text">of convos started by you</div>
+        <div class="badge {starter_class}">{starter_label}</div>
+    </div>''')
+
+    # Slide 10: Response time
+    resp_class = 'green' if d['resp'] < 10 else 'yellow' if d['resp'] < 60 else 'red'
+    resp_label = "INSTANT" if d['resp'] < 10 else "NORMAL" if d['resp'] < 60 else "SLOW"
+    slides.append(f'''
+    <div class="slide">
+        <div class="slide-label">// RESPONSE TIME</div>
+        <div class="slide-text">avg reply</div>
+        <div class="big-number {resp_class}">{d['resp']}</div>
+        <div class="slide-text">minutes</div>
+        <div class="badge {resp_class}">{resp_label}</div>
+    </div>''')
+
+    # Slide 11: Peak hours
+    slides.append(f'''
+    <div class="slide">
+        <div class="slide-label">// PEAK HOURS</div>
+        <div class="slide-text">most active</div>
+        <div class="big-number green">{hr_str}</div>
+        <div class="slide-text">on <span class="yellow">{d['day']}s</span></div>
+    </div>''')
+
+    # Slide 12: 3AM Bestie
+    if d['late']:
+        ln = d['late'][0]
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// 3AM BESTIE</div>
+            <div class="slide-icon">🌙</div>
+            <div class="huge-name cyan">{n(ln[0])}</div>
+            <div class="big-number yellow">{ln[1]}</div>
+            <div class="slide-text">late night texts</div>
+        </div>''')
+
+    # Slide 13: Busiest Day
+    if d['busiest_day']:
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// BUSIEST DAY</div>
+            <div class="slide-text">your most unhinged day</div>
+            <div class="big-number orange">{busiest_str}</div>
+            <div class="slide-text"><span class="yellow">{busiest_count:,}</span> messages in one day</div>
+            <div class="roast">what happened??</div>
+        </div>''')
+
+    # Slide 14: Biggest fan
+    if d['fan']:
+        f = d['fan'][0]
+        ratio = round(f[1]/(f[2]+1), 1)
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// BIGGEST FAN</div>
+            <div class="slide-text">texts you most</div>
+            <div class="huge-name orange">{n(f[0])}</div>
+            <div class="slide-text"><span class="big-number yellow" style="font-size:56px">{ratio}x</span> more than you</div>
+        </div>''')
+
+    # Slide 15: Down bad
+    if d['simp']:
+        si = d['simp'][0]
+        ratio = round(si[1]/(si[2]+1), 1)
+        slides.append(f'''
+        <div class="slide red-bg">
+            <div class="slide-label">// DOWN BAD</div>
+            <div class="slide-text">you simp for</div>
+            <div class="huge-name">{n(si[0])}</div>
+            <div class="slide-text">you text <span class="big-number yellow" style="font-size:56px">{ratio}x</span> more</div>
+        </div>''')
+
+    # Slide 16: Heating Up
+    if d['heating']:
+        heat_html = ''.join([f'<div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">{n(h)}</span><span class="rank-count green">+{h2-h1}</span></div>' for h,h1,h2 in d['heating'][:5]])
+        slides.append(f'''
+        <div class="slide orange-bg">
+            <div class="slide-label">// HEATING UP</div>
+            <div class="slide-text">getting stronger in H2</div>
+            <div class="rank-list">{heat_html}</div>
+        </div>''')
+
+    # Slide 17: Ghosted
+    if d['ghosted']:
+        ghost_html = ''.join([f'<div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">{n(h)}</span><span class="rank-count"><span class="green">{b}</span>→<span class="red">{a}</span></span></div>' for h,b,a in d['ghosted'][:5]])
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// GHOSTED</div>
+            <div class="slide-text">they chose peace</div>
+            <div class="rank-list">{ghost_html}</div>
+            <div class="roast">before June → after</div>
+        </div>''')
+
+    # Slide 18: Emojis
+    if d['emoji'] and any(e[1] > 0 for e in d['emoji']):
+        emo = '  '.join([e[0] for e in d['emoji'] if e[1] > 0])
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// EMOJIS</div>
+            <div class="slide-text">your emotional range</div>
+            <div class="emoji-row">{emo}</div>
+        </div>''')
 
     # Final slide: Summary card
     top3_names = ', '.join([n(h) for h,_,_,_ in top[:3]]) if top else "No contacts"

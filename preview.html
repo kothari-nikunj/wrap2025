@@ -164,26 +164,56 @@ body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(-
 .slide:nth-child(5).active .rank-item { animation: cascadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .slide:nth-child(5).active .rank-item:first-child { animation: crownReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
+/* SLIDE 6: Group Chats - Gather effect */
+.slide:nth-child(6).active .slide-icon { animation: groupGather 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s forwards; }
+.slide:nth-child(6).active .big-number { animation: groupCount 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards; }
+.slide:nth-child(6).active .stat-item:nth-child(1) { animation-delay: 0.45s; }
+.slide:nth-child(6).active .stat-item:nth-child(2) { animation-delay: 0.52s; }
+.slide:nth-child(6).active .stat-item:nth-child(3) { animation-delay: 0.59s; }
+.slide:nth-child(6).active .badge { animation: contributorBadge 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards; }
+
+/* SLIDE 7: Top Groups - Trophy cascade (orange-bg handles fire effect) */
+.slide:nth-child(7).active .rank-item { animation: trophyCascade 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.slide:nth-child(7).active .rank-item:first-child { animation: goldReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.slide:nth-child(7).active .rank-item:nth-child(1) { animation-delay: 0.1s; }
+.slide:nth-child(7).active .rank-item:nth-child(2) { animation-delay: 0.2s; }
+.slide:nth-child(7).active .rank-item:nth-child(3) { animation-delay: 0.3s; }
+.slide:nth-child(7).active .rank-item:nth-child(4) { animation-delay: 0.4s; }
+.slide:nth-child(7).active .rank-item:nth-child(5) { animation-delay: 0.5s; }
+
 /* PURPLE SLIDE (Personality) - Glitch chaos */
 .slide.purple-bg.active .slide-label { animation: labelGlitch 0.6s ease-out forwards; }
 .slide.purple-bg.active .personality-type { animation: personalityGlitch 1s ease-out 0.15s forwards; }
 .slide.purple-bg.active .roast { animation: flickerReveal 0.7s ease-out 0.55s forwards; }
 
-/* SLIDE 7: Conversation starter - Fill effect */
-.slide:nth-child(7).active .big-number { animation: percentReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
-.slide:nth-child(7).active .badge { animation: badgeSlam 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.55s forwards; }
+/* SLIDE 9: Conversation starter - Fill effect */
+.slide:nth-child(9).active .big-number { animation: percentReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
+.slide:nth-child(9).active .badge { animation: badgeSlam 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.55s forwards; }
 
-/* SLIDE 8: Busiest day - Calendar flip */
-.slide:nth-child(8).active .big-number { animation: calendarFlip 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
-.slide:nth-child(8).active .roast { animation: shakeReveal 0.5s ease-out 0.5s forwards; }
+/* SLIDE 10: Response time - Timer */
+.slide:nth-child(10).active .big-number { animation: timerReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
+.slide:nth-child(10).active .badge { animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards; }
 
-/* SLIDE 9: 3AM bestie - Dreamy moon */
-.slide:nth-child(9).active .slide-icon { animation: moonFloat 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards; }
-.slide:nth-child(9).active .huge-name { animation: dreamyName 0.6s ease-out 0.35s forwards; }
-.slide:nth-child(9).active .big-number { animation: softNumber 0.5s ease-out 0.5s forwards; }
+/* SLIDE 11: Peak hours - Clock */
+.slide:nth-child(11).active .big-number { animation: clockReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
 
-/* SLIDE 10: Peak hours - Clock */
-.slide:nth-child(10).active .big-number { animation: clockReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
+/* SLIDE 12: 3AM bestie - Dreamy moon */
+.slide:nth-child(12).active .slide-icon { animation: moonFloat 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards; }
+.slide:nth-child(12).active .huge-name { animation: dreamyName 0.6s ease-out 0.35s forwards; }
+.slide:nth-child(12).active .big-number { animation: softNumber 0.5s ease-out 0.5s forwards; }
+
+/* SLIDE 13: Busiest day - Calendar flip */
+.slide:nth-child(13).active .big-number { animation: calendarFlip 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
+.slide:nth-child(13).active .roast { animation: shakeReveal 0.5s ease-out 0.5s forwards; }
+
+/* SLIDE 14: Biggest fan - Excited */
+.slide:nth-child(14).active .huge-name { animation: fanName 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s forwards; }
+.slide:nth-child(14).active .big-number { animation: excitedNumber 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s forwards; }
+
+/* RED SLIDE (Down Bad) - Dramatic */
+.slide.red-bg.active .slide-label { animation: labelPulse 0.5s ease-out forwards; }
+.slide.red-bg.active .huge-name { animation: dramaticDrop 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
+.slide.red-bg.active .big-number { animation: desperateNumber 0.6s ease-out 0.45s forwards; }
 
 /* ORANGE SLIDE (Heating Up) - Fire */
 .slide.orange-bg.active .slide-label { animation: fireLabel 0.5s ease-out forwards; }
@@ -195,43 +225,13 @@ body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(-
 .slide.orange-bg.active .rank-item:nth-child(4) { animation-delay: 0.38s; }
 .slide.orange-bg.active .rank-item:nth-child(5) { animation-delay: 0.48s; }
 
-/* SLIDE 12: Biggest fan - Excited */
-.slide:nth-child(12).active .huge-name { animation: fanName 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s forwards; }
-.slide:nth-child(12).active .big-number { animation: excitedNumber 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s forwards; }
+/* SLIDE 17: Ghosted - Spooky */
+.slide:nth-child(17).active .rank-item { animation: ghostSlide 0.5s ease-out forwards; }
+.slide:nth-child(17).active .rank-item:first-child { animation: ghostTop 0.6s ease-out forwards; }
+.slide:nth-child(17).active .roast { animation: ghostText 0.4s ease-out 0.6s forwards; }
 
-/* RED SLIDE (Down Bad) - Dramatic */
-.slide.red-bg.active .slide-label { animation: labelPulse 0.5s ease-out forwards; }
-.slide.red-bg.active .huge-name { animation: dramaticDrop 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
-.slide.red-bg.active .big-number { animation: desperateNumber 0.6s ease-out 0.45s forwards; }
-
-/* SLIDE 14: Ghosted - Spooky */
-.slide:nth-child(14).active .rank-item { animation: ghostSlide 0.5s ease-out forwards; }
-.slide:nth-child(14).active .rank-item:first-child { animation: ghostTop 0.6s ease-out forwards; }
-.slide:nth-child(14).active .roast { animation: ghostText 0.4s ease-out 0.6s forwards; }
-
-/* SLIDE 15: Response time - Timer */
-.slide:nth-child(15).active .big-number { animation: timerReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards; }
-.slide:nth-child(15).active .badge { animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards; }
-
-/* SLIDE 16: Emojis - Wave each emoji */
-.slide:nth-child(16).active .emoji-row { animation: emojiContainer 0.6s ease-out 0.2s forwards; }
-
-/* SLIDE 17: Group Chats - Gather effect */
-.slide:nth-child(17).active .slide-icon { animation: groupGather 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s forwards; }
-.slide:nth-child(17).active .big-number { animation: groupCount 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards; }
-.slide:nth-child(17).active .stat-item:nth-child(1) { animation-delay: 0.45s; }
-.slide:nth-child(17).active .stat-item:nth-child(2) { animation-delay: 0.52s; }
-.slide:nth-child(17).active .stat-item:nth-child(3) { animation-delay: 0.59s; }
-.slide:nth-child(17).active .badge { animation: contributorBadge 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards; }
-
-/* SLIDE 18: Top Groups - Trophy cascade */
-.slide:nth-child(18).active .rank-item { animation: trophyCascade 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.slide:nth-child(18).active .rank-item:first-child { animation: goldReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-.slide:nth-child(18).active .rank-item:nth-child(1) { animation-delay: 0.1s; }
-.slide:nth-child(18).active .rank-item:nth-child(2) { animation-delay: 0.2s; }
-.slide:nth-child(18).active .rank-item:nth-child(3) { animation-delay: 0.3s; }
-.slide:nth-child(18).active .rank-item:nth-child(4) { animation-delay: 0.4s; }
-.slide:nth-child(18).active .rank-item:nth-child(5) { animation-delay: 0.5s; }
+/* SLIDE 18: Emojis - Wave each emoji */
+.slide:nth-child(18).active .emoji-row { animation: emojiContainer 0.6s ease-out 0.2s forwards; }
 
 /* SUMMARY SLIDE - Grand finale */
 .slide.summary-slide.active .summary-card { animation: summaryReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards; }
@@ -741,109 +741,7 @@ body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(-
         </div>
     </div>
 
-    <!-- 6: Personality -->
-    <div class="slide purple-bg">
-        <div class="slide-label">// DIAGNOSIS</div>
-        <div class="slide-text">texting personality</div>
-        <div class="personality-type">NOCTURNAL MENACE</div>
-        <div class="roast">"terrorizes people at ungodly hours"</div>
-    </div>
-
-    <!-- 7: Conversation Starter -->
-    <div class="slide">
-        <div class="slide-label">// WHO TEXTS FIRST</div>
-        <div class="slide-text">conversation initiator</div>
-        <div class="big-number green">62<span class="pct">%</span></div>
-        <div class="slide-text">of convos started by you</div>
-        <div class="badge green">YOU START</div>
-    </div>
-
-    <!-- 8: Busiest Day -->
-    <div class="slide">
-        <div class="slide-label">// BUSIEST DAY</div>
-        <div class="slide-text">your most unhinged day</div>
-        <div class="big-number orange">Mar 15</div>
-        <div class="slide-text"><span class="yellow">523</span> messages in one day</div>
-        <div class="roast">what happened??</div>
-    </div>
-
-    <!-- 9: 3AM -->
-    <div class="slide">
-        <div class="slide-label">// 3AM BESTIE</div>
-        <div class="slide-icon">🌙</div>
-        <div class="huge-name cyan">Jordan Lee</div>
-        <div class="big-number yellow">147</div>
-        <div class="slide-text">late night texts</div>
-    </div>
-
-    <!-- 10: Peak -->
-    <div class="slide">
-        <div class="slide-label">// PEAK HOURS</div>
-        <div class="slide-text">most active</div>
-        <div class="big-number green">10PM</div>
-        <div class="slide-text">on <span class="yellow">Thursdays</span></div>
-    </div>
-
-    <!-- 11: Heating Up -->
-    <div class="slide orange-bg">
-        <div class="slide-label">// HEATING UP</div>
-        <div class="slide-text">getting stronger in H2</div>
-        <div class="rank-list">
-            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Chris Wang</span><span class="rank-count green">+423</span></div>
-            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Maya Johnson</span><span class="rank-count green">+287</span></div>
-            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Priya Sharma</span><span class="rank-count green">+156</span></div>
-            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Jake Miller</span><span class="rank-count green">+98</span></div>
-            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Emma Davis</span><span class="rank-count green">+72</span></div>
-        </div>
-    </div>
-
-    <!-- 12: Biggest Fan -->
-    <div class="slide">
-        <div class="slide-label">// BIGGEST FAN</div>
-        <div class="slide-text">texts you most</div>
-        <div class="huge-name orange">Taylor Swift</div>
-        <div class="slide-text"><span class="big-number yellow" style="font-size:56px">2.8x</span> more than you</div>
-    </div>
-
-    <!-- 13: Down Bad -->
-    <div class="slide red-bg">
-        <div class="slide-label">// DOWN BAD</div>
-        <div class="slide-text">you simp for</div>
-        <div class="huge-name">Morgan Davis</div>
-        <div class="slide-text">you text <span class="big-number yellow" style="font-size:56px">3.2x</span> more</div>
-    </div>
-
-    <!-- 14: Ghosted -->
-    <div class="slide">
-        <div class="slide-label">// GHOSTED</div>
-        <div class="slide-text">they chose peace</div>
-        <div class="rank-list">
-            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Drew Thompson</span><span class="rank-count"><span class="green">203</span> → <span class="red">0</span></span></div>
-            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Zack Miller</span><span class="rank-count"><span class="green">87</span> → <span class="red">2</span></span></div>
-            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Lisa Park</span><span class="rank-count"><span class="green">64</span> → <span class="red">1</span></span></div>
-            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Kevin Wu</span><span class="rank-count"><span class="green">52</span> → <span class="red">0</span></span></div>
-            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Sarah Jones</span><span class="rank-count"><span class="green">41</span> → <span class="red">1</span></span></div>
-        </div>
-        <div class="roast">before June → after</div>
-    </div>
-
-    <!-- 15: Response -->
-    <div class="slide">
-        <div class="slide-label">// RESPONSE TIME</div>
-        <div class="slide-text">avg reply</div>
-        <div class="big-number yellow">23</div>
-        <div class="slide-text">minutes</div>
-        <div class="badge yellow">NORMAL</div>
-    </div>
-
-    <!-- 16: Emojis -->
-    <div class="slide">
-        <div class="slide-label">// EMOJIS</div>
-        <div class="slide-text">your emotional range</div>
-        <div class="emoji-row">😂  ❤️  🔥  💀  😭</div>
-    </div>
-
-    <!-- 17: Group Chats Overview -->
+    <!-- 6: Group Chats Overview -->
     <div class="slide">
         <div class="slide-label">// GROUP CHATS</div>
         <div class="slide-icon">👥</div>
@@ -857,7 +755,7 @@ body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(-
         <div class="badge green">CONTRIBUTOR</div>
     </div>
 
-    <!-- 18: Top Group Chats -->
+    <!-- 7: Top Group Chats -->
     <div class="slide orange-bg">
         <div class="slide-label">// TOP GROUP CHATS</div>
         <div class="slide-text">your most active groups</div>
@@ -868,6 +766,108 @@ body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(-
             <div class="rank-item"><span class="rank-num">4</span><span class="rank-name">Family Chat</span><span class="rank-count">521</span></div>
             <div class="rank-item"><span class="rank-num">5</span><span class="rank-name">Gym Bros</span><span class="rank-count">387</span></div>
         </div>
+    </div>
+
+    <!-- 8: Personality -->
+    <div class="slide purple-bg">
+        <div class="slide-label">// DIAGNOSIS</div>
+        <div class="slide-text">texting personality</div>
+        <div class="personality-type">NOCTURNAL MENACE</div>
+        <div class="roast">"terrorizes people at ungodly hours"</div>
+    </div>
+
+    <!-- 9: Conversation Starter -->
+    <div class="slide">
+        <div class="slide-label">// WHO TEXTS FIRST</div>
+        <div class="slide-text">conversation initiator</div>
+        <div class="big-number green">62<span class="pct">%</span></div>
+        <div class="slide-text">of convos started by you</div>
+        <div class="badge green">YOU START</div>
+    </div>
+
+    <!-- 10: Response -->
+    <div class="slide">
+        <div class="slide-label">// RESPONSE TIME</div>
+        <div class="slide-text">avg reply</div>
+        <div class="big-number yellow">23</div>
+        <div class="slide-text">minutes</div>
+        <div class="badge yellow">NORMAL</div>
+    </div>
+
+    <!-- 11: Peak -->
+    <div class="slide">
+        <div class="slide-label">// PEAK HOURS</div>
+        <div class="slide-text">most active</div>
+        <div class="big-number green">10PM</div>
+        <div class="slide-text">on <span class="yellow">Thursdays</span></div>
+    </div>
+
+    <!-- 12: 3AM -->
+    <div class="slide">
+        <div class="slide-label">// 3AM BESTIE</div>
+        <div class="slide-icon">🌙</div>
+        <div class="huge-name cyan">Jordan Lee</div>
+        <div class="big-number yellow">147</div>
+        <div class="slide-text">late night texts</div>
+    </div>
+
+    <!-- 13: Busiest Day -->
+    <div class="slide">
+        <div class="slide-label">// BUSIEST DAY</div>
+        <div class="slide-text">your most unhinged day</div>
+        <div class="big-number orange">Mar 15</div>
+        <div class="slide-text"><span class="yellow">523</span> messages in one day</div>
+        <div class="roast">what happened??</div>
+    </div>
+
+    <!-- 14: Biggest Fan -->
+    <div class="slide">
+        <div class="slide-label">// BIGGEST FAN</div>
+        <div class="slide-text">texts you most</div>
+        <div class="huge-name orange">Taylor Swift</div>
+        <div class="slide-text"><span class="big-number yellow" style="font-size:56px">2.8x</span> more than you</div>
+    </div>
+
+    <!-- 15: Down Bad -->
+    <div class="slide red-bg">
+        <div class="slide-label">// DOWN BAD</div>
+        <div class="slide-text">you simp for</div>
+        <div class="huge-name">Morgan Davis</div>
+        <div class="slide-text">you text <span class="big-number yellow" style="font-size:56px">3.2x</span> more</div>
+    </div>
+
+    <!-- 16: Heating Up -->
+    <div class="slide orange-bg">
+        <div class="slide-label">// HEATING UP</div>
+        <div class="slide-text">getting stronger in H2</div>
+        <div class="rank-list">
+            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Chris Wang</span><span class="rank-count green">+423</span></div>
+            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Maya Johnson</span><span class="rank-count green">+287</span></div>
+            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Priya Sharma</span><span class="rank-count green">+156</span></div>
+            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Jake Miller</span><span class="rank-count green">+98</span></div>
+            <div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">Emma Davis</span><span class="rank-count green">+72</span></div>
+        </div>
+    </div>
+
+    <!-- 17: Ghosted -->
+    <div class="slide">
+        <div class="slide-label">// GHOSTED</div>
+        <div class="slide-text">they chose peace</div>
+        <div class="rank-list">
+            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Drew Thompson</span><span class="rank-count"><span class="green">203</span> → <span class="red">0</span></span></div>
+            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Zack Miller</span><span class="rank-count"><span class="green">87</span> → <span class="red">2</span></span></div>
+            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Lisa Park</span><span class="rank-count"><span class="green">64</span> → <span class="red">1</span></span></div>
+            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Kevin Wu</span><span class="rank-count"><span class="green">52</span> → <span class="red">0</span></span></div>
+            <div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">Sarah Jones</span><span class="rank-count"><span class="green">41</span> → <span class="red">1</span></span></div>
+        </div>
+        <div class="roast">before June → after</div>
+    </div>
+
+    <!-- 18: Emojis -->
+    <div class="slide">
+        <div class="slide-label">// EMOJIS</div>
+        <div class="slide-text">your emotional range</div>
+        <div class="emoji-row">😂  ❤️  🔥  💀  😭</div>
     </div>
 
     <!-- 19: Summary -->
