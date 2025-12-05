@@ -1506,15 +1506,14 @@ async function copyScriptForReview() {
             if (!response.ok) throw new Error('Failed to fetch');
             scriptContent = await response.text();
         } catch (fetchErr) {
-            // Fetch failed - open GitHub directly as fallback
+            // Fetch failed - show clickable link (window.open gets blocked in async context)
             console.error('Fetch error:', fetchErr);
-            window.open('https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py', '_blank');
-            btnText.textContent = 'Opened in GitHub';
+            btnText.innerHTML = '<a href="https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py" target="_blank" style="color: inherit; text-decoration: underline;">Click to view on GitHub</a>';
             btnIcon.textContent = '🔗';
             setTimeout(() => {
                 btnText.textContent = originalText;
                 btnIcon.textContent = '📋';
-            }, 3000);
+            }, 5000);
             return;
         }
 
@@ -1531,15 +1530,14 @@ ${scriptContent}`;
         try {
             await navigator.clipboard.writeText(reviewPrompt);
         } catch (clipboardErr) {
-            // Clipboard failed - open GitHub directly as fallback
+            // Clipboard failed - show clickable link (window.open gets blocked in async context)
             console.error('Clipboard error:', clipboardErr);
-            window.open('https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py', '_blank');
-            btnText.textContent = 'Opened in GitHub';
+            btnText.innerHTML = '<a href="https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py" target="_blank" style="color: inherit; text-decoration: underline;">Click to view on GitHub</a>';
             btnIcon.textContent = '🔗';
             setTimeout(() => {
                 btnText.textContent = originalText;
                 btnIcon.textContent = '📋';
-            }, 3000);
+            }, 5000);
             return;
         }
 
