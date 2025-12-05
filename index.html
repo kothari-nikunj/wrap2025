@@ -1500,10 +1500,24 @@ async function copyScriptForReview() {
         btnText.textContent = 'Fetching script...';
         btnIcon.textContent = '⏳';
 
-        const response = await fetch('https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/imessage_wrapped.py');
-        if (!response.ok) throw new Error('Failed to fetch');
+        let scriptContent;
+        try {
+            const response = await fetch('https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/imessage_wrapped.py');
+            if (!response.ok) throw new Error('Failed to fetch');
+            scriptContent = await response.text();
+        } catch (fetchErr) {
+            // Fetch failed - open GitHub directly as fallback
+            console.error('Fetch error:', fetchErr);
+            window.open('https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py', '_blank');
+            btnText.textContent = 'Opened in GitHub';
+            btnIcon.textContent = '🔗';
+            setTimeout(() => {
+                btnText.textContent = originalText;
+                btnIcon.textContent = '📋';
+            }, 3000);
+            return;
+        }
 
-        const scriptContent = await response.text();
         const reviewPrompt = `Please review this Python script for security concerns. Verify that:
 1. It does NOT send any data over the network
 2. It only reads local files (iMessage database and AddressBook)
@@ -1514,7 +1528,20 @@ Here is the script:
 
 ${scriptContent}`;
 
-        await navigator.clipboard.writeText(reviewPrompt);
+        try {
+            await navigator.clipboard.writeText(reviewPrompt);
+        } catch (clipboardErr) {
+            // Clipboard failed - open GitHub directly as fallback
+            console.error('Clipboard error:', clipboardErr);
+            window.open('https://github.com/kothari-nikunj/wrap2025/blob/main/imessage_wrapped.py', '_blank');
+            btnText.textContent = 'Opened in GitHub';
+            btnIcon.textContent = '🔗';
+            setTimeout(() => {
+                btnText.textContent = originalText;
+                btnIcon.textContent = '📋';
+            }, 3000);
+            return;
+        }
 
         btn.classList.add('copied');
         btnText.textContent = 'Copied! Paste in ChatGPT/Claude';
