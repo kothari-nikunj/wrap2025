@@ -562,40 +562,37 @@ def gen_html(d, contacts, path):
 
     # Slide 4: Contribution Graph (GitHub-style activity heatmap) - Year overview
     if d['daily_counts']:
-        from datetime import datetime as dt, timedelta
-        # Use the analysis year passed from main, extend to current date
-        year = d.get('year', now.year)
-        year_start = dt(year, 1, 1)
-        # Always extend to today's date
-        today = dt.now()
-        year_end = today
+        from datetime import datetime as dt, date as ddate, timedelta
+        today = dt.now().date()
+        year = int(d.get('year', today.year))
+        year_start = ddate(year, 1, 1)
+        # Show up to today when looking at the current year, otherwise end on Dec 31 of that year
+        year_end = today if year == today.year else ddate(year, 12, 31)
 
-        # Build the calendar grid (53 weeks x 7 days)
-        # GitHub style: columns are weeks, rows are days (Sun=0 to Sat=6)
+        # Build the calendar grid (weeks x 7 days, GitHub style Sunday→Saturday)
         cal_cells = []
 
-        # Find the first Sunday on or before Jan 1
-        first_day = year_start
-        while first_day.weekday() != 6:  # 6 = Sunday in Python
-            first_day -= timedelta(days=1)
+        # Find the Sunday on or before Jan 1
+        first_day = year_start - timedelta(days=(year_start.weekday() + 1) % 7)
+        # Find the Saturday of the last week that contains year_end
+        last_day = year_end + timedelta(days=(5 - year_end.weekday()) % 7)
 
-        # Generate 53 weeks of data
         current_date = first_day
-        max_count = d['max_daily'] if d['max_daily'] > 0 else 1
+        max_count = max(d['daily_counts'].values()) if d['daily_counts'] else 1
 
         # Month labels - track when months start
         month_labels = []
-        last_month = -1
+        last_month = None
 
         week_idx = 0
-        while current_date <= year_end + timedelta(days=6):  # Go a bit past to fill last week
+        while current_date <= last_day:
             week_cells = []
-            for day_of_week in range(7):  # Sun to Sat
+            for _ in range(7):  # Sun to Sat
                 date_str = current_date.strftime('%Y-%m-%d')
                 count = d['daily_counts'].get(date_str, 0)
 
                 # Track month changes for labels
-                if current_date.month != last_month and year_start <= current_date <= year_end:
+                if (year_start <= current_date <= year_end) and current_date.month != last_month:
                     month_labels.append((week_idx, current_date.strftime('%b')))
                     last_month = current_date.month
 
@@ -618,18 +615,28 @@ def gen_html(d, contacts, path):
 
             cal_cells.append(week_cells)
             week_idx += 1
-            if week_idx > 53:  # Safety limit
+            if week_idx > 60:  # Safety limit
                 break
 
-        # Build the HTML grid
+        # Build the HTML grid with proper structure
         contrib_html = '<div class="contrib-graph">'
-        contrib_html += '<div class="contrib-months">'
-        for week_num, month_name in month_labels[:12]:  # Max 12 months
-            contrib_html += f'<span style="grid-column:{week_num + 1}">{month_name}</span>'
-        contrib_html += '</div>'
-        contrib_html += '<div class="contrib-days"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>'
-        contrib_html += '<div class="contrib-grid">'
+        contrib_html += '<div class="contrib-container">'
 
+        # Y-axis: Day labels
+        contrib_html += '<div class="contrib-days"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>'
+
+        contrib_html += '<div class="contrib-main">'
+
+        # X-axis: Month labels - position based on week index, each week is 12px (10px cell + 2px gap)
+        contrib_html += '<div class="contrib-months">'
+        for week_num, month_name in month_labels:
+            # Position each month label at the start of its first week
+            left_px = week_num * 12  # 10px cell + 2px gap
+            contrib_html += f'<span style="position:absolute;left:{left_px}px">{month_name}</span>'
+        contrib_html += '</div>'
+
+        # Grid of cells
+        contrib_html += '<div class="contrib-grid">'
         for week in cal_cells:
             contrib_html += '<div class="contrib-week">'
             for date_str, count, level, in_year in week:
@@ -646,8 +653,11 @@ def gen_html(d, contacts, path):
                 else:
                     contrib_html += '<div class="contrib-cell empty"></div>'
             contrib_html += '</div>'
-
         contrib_html += '</div>'
+
+        contrib_html += '</div>'  # close contrib-main
+        contrib_html += '</div>'  # close contrib-container
+
         # Legend
         contrib_html += '<div class="contrib-legend"><span>Less</span><div class="contrib-cell level-0"></div><div class="contrib-cell level-1"></div><div class="contrib-cell level-2"></div><div class="contrib-cell level-3"></div><div class="contrib-cell level-4"></div><span>More</span></div>'
         contrib_html += '</div>'
@@ -1002,13 +1012,14 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .slide.contrib-slide {{ background:linear-gradient(145deg,#12121f 0%,#0f1f2d 100%); padding:24px 16px 80px; }}
 
 /* === CONTRIBUTION GRAPH STYLES === */
-.contrib-graph {{ width:100%; max-width:900px; margin:20px auto; overflow-x:auto; padding:0 8px; }}
-.contrib-months {{ display:grid; grid-template-columns:repeat(53,1fr); gap:0; margin-bottom:4px; margin-left:32px; font-size:10px; color:var(--muted); height:16px; }}
-.contrib-months span {{ text-align:left; }}
-.contrib-days {{ position:absolute; left:8px; display:flex; flex-direction:column; gap:2px; font-size:8px; color:var(--muted); margin-top:20px; }}
+.contrib-graph {{ display:flex; flex-direction:column; align-items:center; margin:20px auto; padding:0 8px; }}
+.contrib-container {{ display:flex; gap:4px; }}
+.contrib-days {{ display:flex; flex-direction:column; gap:2px; font-size:9px; color:var(--muted); padding-top:20px; min-width:28px; text-align:right; padding-right:4px; }}
 .contrib-days span {{ height:10px; line-height:10px; }}
-.contrib-days span:nth-child(2), .contrib-days span:nth-child(4), .contrib-days span:nth-child(6) {{ visibility:hidden; }}
-.contrib-grid {{ display:flex; gap:2px; margin-left:32px; }}
+.contrib-main {{ display:flex; flex-direction:column; }}
+.contrib-months {{ position:relative; height:16px; margin-bottom:4px; font-size:10px; color:var(--muted); }}
+.contrib-months span {{ position:absolute; white-space:nowrap; }}
+.contrib-grid {{ display:flex; gap:2px; }}
 .contrib-week {{ display:flex; flex-direction:column; gap:2px; }}
 .contrib-cell {{ width:10px; height:10px; border-radius:2px; background:rgba(255,255,255,0.05); }}
 .contrib-cell.empty {{ background:transparent; }}
@@ -1021,7 +1032,7 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .contrib-tooltip {{ position:fixed; background:rgba(20,20,30,0.95); color:var(--text); padding:8px 12px; border-radius:6px; font-size:12px; pointer-events:none; z-index:1000; white-space:nowrap; border:1px solid rgba(255,255,255,0.1); box-shadow:0 4px 12px rgba(0,0,0,0.3); }}
 .contrib-tooltip .tooltip-count {{ font-family:var(--font-mono); color:var(--green); font-weight:600; }}
 .contrib-tooltip .tooltip-date {{ color:var(--muted); font-size:11px; margin-top:2px; }}
-.contrib-legend {{ display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:8px; font-size:10px; color:var(--muted); padding-right:8px; }}
+.contrib-legend {{ display:flex; align-items:center; justify-content:center; gap:4px; margin-top:12px; font-size:10px; color:var(--muted); }}
 .contrib-legend .contrib-cell {{ cursor:default; }}
 .contrib-stats {{ display:flex; gap:32px; margin-top:24px; justify-content:center; }}
 .contrib-stat {{ display:flex; flex-direction:column; align-items:center; }}
