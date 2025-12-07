@@ -566,12 +566,9 @@ def gen_html(d, contacts, path):
         # Use the analysis year passed from main, extend to current date
         year = d.get('year', now.year)
         year_start = dt(year, 1, 1)
-        # End at current date if we're in the analysis year, otherwise Dec 31
+        # Always extend to today's date
         today = dt.now()
-        if today.year == year:
-            year_end = today
-        else:
-            year_end = dt(year, 12, 31)
+        year_end = today
 
         # Build the calendar grid (53 weeks x 7 days)
         # GitHub style: columns are weeks, rows are days (Sun=0 to Sat=6)
@@ -637,7 +634,15 @@ def gen_html(d, contacts, path):
             contrib_html += '<div class="contrib-week">'
             for date_str, count, level, in_year in week:
                 if in_year:
-                    contrib_html += f'<div class="contrib-cell level-{level}" title="{date_str}: {count} msgs"></div>'
+                    # Format date nicely for tooltip (e.g., "Dec 7, 2025")
+                    from datetime import datetime as dt_parse
+                    try:
+                        date_obj = dt_parse.strptime(date_str, '%Y-%m-%d')
+                        formatted_date = date_obj.strftime('%b %d, %Y')
+                    except:
+                        formatted_date = date_str
+                    msg_text = "message" if count == 1 else "messages"
+                    contrib_html += f'<div class="contrib-cell level-{level}" data-date="{formatted_date}" data-count="{count}" data-msg-text="{msg_text}"></div>'
                 else:
                     contrib_html += '<div class="contrib-cell empty"></div>'
             contrib_html += '</div>'
@@ -1012,6 +1017,10 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .contrib-cell.level-2 {{ background:rgba(74,222,128,0.45); }}
 .contrib-cell.level-3 {{ background:rgba(74,222,128,0.70); }}
 .contrib-cell.level-4 {{ background:var(--green); }}
+.contrib-cell:not(.empty) {{ cursor:pointer; position:relative; }}
+.contrib-tooltip {{ position:fixed; background:rgba(20,20,30,0.95); color:var(--text); padding:8px 12px; border-radius:6px; font-size:12px; pointer-events:none; z-index:1000; white-space:nowrap; border:1px solid rgba(255,255,255,0.1); box-shadow:0 4px 12px rgba(0,0,0,0.3); }}
+.contrib-tooltip .tooltip-count {{ font-family:var(--font-mono); color:var(--green); font-weight:600; }}
+.contrib-tooltip .tooltip-date {{ color:var(--muted); font-size:11px; margin-top:2px; }}
 .contrib-legend {{ display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:8px; font-size:10px; color:var(--muted); padding-right:8px; }}
 .contrib-legend .contrib-cell {{ cursor:default; }}
 .contrib-stats {{ display:flex; gap:32px; margin-top:24px; justify-content:center; }}
@@ -1561,6 +1570,29 @@ async function saveSlide(slideEl, filename, btn) {{
     slideEl.classList.remove('capturing');
     if (watermark) watermark.style.display = 'none';
 }}
+
+// Contribution graph tooltip
+const tooltip = document.createElement('div');
+tooltip.className = 'contrib-tooltip';
+tooltip.style.display = 'none';
+document.body.appendChild(tooltip);
+
+document.querySelectorAll('.contrib-cell[data-date]').forEach(cell => {{
+    cell.addEventListener('mouseenter', (e) => {{
+        const count = cell.dataset.count;
+        const date = cell.dataset.date;
+        const msgText = cell.dataset.msgText;
+        tooltip.innerHTML = `<div class="tooltip-count">${{count}} ${{msgText}}</div><div class="tooltip-date">${{date}}</div>`;
+        tooltip.style.display = 'block';
+    }});
+    cell.addEventListener('mousemove', (e) => {{
+        tooltip.style.left = (e.clientX + 12) + 'px';
+        tooltip.style.top = (e.clientY - 10) + 'px';
+    }});
+    cell.addEventListener('mouseleave', () => {{
+        tooltip.style.display = 'none';
+    }});
+}});
 
 goTo(0);
 </script>
