@@ -78,6 +78,59 @@ def get_name(handle, contacts):
         return contacts[digits[-7:]]
     return handle
 
+def contact_key_and_label(handle, contacts):
+    """
+    Build a stable key for a contact so phone + email from the same person merge.
+    Priority:
+      1) Address book name
+      2) Normalized phone number
+      3) Normalized email
+      4) Raw handle
+    """
+    name = get_name(handle, contacts)
+    clean_name = re.sub(r'\s+', ' ', name).strip() if name else ''
+    lower_handle = handle.lower().strip()
+
+    if clean_name and clean_name.lower() != lower_handle:
+        return f"name:{clean_name.lower()}", clean_name
+
+    digits = normalize_phone(handle)
+    if digits:
+        return f"phone:{digits}", clean_name or digits
+
+    if '@' in handle:
+        return f"email:{lower_handle}", clean_name or lower_handle
+
+    return f"raw:{lower_handle}", clean_name or handle
+
+def aggregate_contacts(rows, contacts):
+    """
+    Merge message counts for multiple handles that belong to the same contact.
+    Returns a sorted list of dicts with name/count/sent/recv/handles.
+    """
+    aggregated = {}
+    for handle, total, sent, recv in rows:
+        key, label = contact_key_and_label(handle, contacts)
+        if key not in aggregated:
+            aggregated[key] = {
+                'name': label,
+                'count': 0,
+                'sent': 0,
+                'recv': 0,
+                'handles': set()
+            }
+        aggregated[key]['count'] += total or 0
+        aggregated[key]['sent'] += sent or 0
+        aggregated[key]['recv'] += recv or 0
+        aggregated[key]['handles'].add(handle)
+
+        # Prefer a real contact name over raw handles when available
+        current_label = aggregated[key]['name']
+        if label and (current_label == handle or current_label == label.lower()):
+            aggregated[key]['name'] = label
+
+    return sorted(aggregated.values(), key=lambda x: x['count'], reverse=True)
+
 def check_access():
     if not os.path.exists(IMESSAGE_DB):
         print("\n[FATAL] Not macOS.")
@@ -98,7 +151,7 @@ def q(sql):
     conn.close()
     return r
 
-def analyze(ts_start, ts_jun):
+def analyze(ts_start, ts_jun, contacts):
     d = {}
 
     # === IDENTIFY 1:1 vs GROUP CHATS ===
@@ -129,10 +182,10 @@ def analyze(ts_start, ts_jun):
         WHERE (date/1000000000+978307200)>{ts_start}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
     """)[0]
-    d['stats'] = (raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0)
+    stats = [raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0]
 
     # Top contacts (1:1 only, excluding 5-6 digit shortcodes like 12345, 123456)
-    d['top'] = q(f"""{one_on_one_cte}
+    top_handles = q(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END)
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
         WHERE (m.date/1000000000+978307200)>{ts_start}
@@ -140,6 +193,19 @@ def analyze(ts_start, ts_jun):
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         GROUP BY h.id ORDER BY t DESC LIMIT 20
     """)
+    d['top'] = aggregate_contacts(top_handles, contacts)
+
+    # Unique people count (merge phone/email for same contact)
+    all_handles = q(f"""{one_on_one_cte}
+        SELECT DISTINCT h.id
+        FROM message m JOIN handle h ON m.handle_id=h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+    """)
+    unique_contact_keys = {contact_key_and_label(row[0], contacts)[0] for row in all_handles}
+    stats[3] = len(unique_contact_keys)
+    d['stats'] = tuple(stats)
 
     # Late night texters (1:1 only, excluding shortcodes)
     d['late'] = q(f"""{one_on_one_cte}
@@ -498,15 +564,18 @@ def gen_html(d, contacts, path):
         <div class="slide pink-bg">
             <div class="slide-label">// YOUR #1</div>
             <div class="slide-text">most texted person</div>
-            <div class="huge-name">{n(top[0][0])}</div>
-            <div class="big-number yellow">{top[0][1]:,}</div>
+            <div class="huge-name">{top[0]["name"]}</div>
+            <div class="big-number yellow">{top[0]["count"]:,}</div>
             <div class="slide-text">messages</div>
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_your_number_one.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
         # Slide 5: Top 5
-        top5_html = ''.join([f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{n(h)}</span><span class="rank-count">{t:,}</span></div>' for i,(h,t,_,_) in enumerate(top[:5],1)])
+        top5_html = ''.join([
+            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{c["name"]}</span><span class="rank-count">{c["count"]:,}</span></div>'
+            for i, c in enumerate(top[:5], 1)
+        ])
         slides.append(f'''
         <div class="slide">
             <div class="slide-label">// INNER CIRCLE</div>
@@ -720,7 +789,7 @@ def gen_html(d, contacts, path):
         </div>''')
 
     # Final slide: Summary card
-    top3_names = ', '.join([n(h) for h,_,_,_ in top[:3]]) if top else "No contacts"
+    top3_names = ', '.join([c["name"] for c in top[:3]]) if top else "No contacts"
     slides.append(f'''
     <div class="slide summary-slide">
         <div class="summary-card" id="summaryCard">
@@ -1355,7 +1424,7 @@ def main():
     
     print(f"[*] Analyzing {year}...")
     print("    ⏳ Reading message database...", end='', flush=True)
-    data = analyze(ts_start, ts_jun)
+    data = analyze(ts_start, ts_jun, contacts)
     print(f"\r    ✓ {data['stats'][0]:,} messages analyzed    ")
     
     print(f"[*] Generating report...")
