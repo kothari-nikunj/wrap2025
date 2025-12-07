@@ -516,7 +516,7 @@ def analyze(ts_start, ts_jun, contacts):
         JOIN group_messages gm ON c.ROWID = gm.chat_id
         GROUP BY c.ROWID
         ORDER BY msg_count DESC
-        LIMIT 5
+        LIMIT 10
     """)
     d['group_leaderboard'] = []
     for row in r:
@@ -630,15 +630,19 @@ def gen_html(d, contacts, path):
         </div>''')
 
         # Slide 5: Top 5
-        top5_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{c["name"]}</span><span class="rank-count">{c["count"]:,}</span></div>'
-            for i, c in enumerate(top[:5], 1)
+        top_list_html = ''.join([
+            f'<div class="rank-item{" hidden-inner" if i>5 else ""}"><span class="rank-num">{i}</span><span class="rank-name">{c["name"]}</span><span class="rank-count">{c["count"]:,}</span></div>'
+            for i, c in enumerate(top[:10], 1)
         ])
+        toggle_inner_btn = ''
+        if len(top) > 5:
+            toggle_inner_btn = '<button class="toggle-busiest-btn" onclick="toggleInner(this)">Show full top 10</button>'
         slides.append(f'''
         <div class="slide">
             <div class="slide-label">// INNER CIRCLE</div>
             <div class="slide-text">your top 5</div>
-            <div class="rank-list">{top5_html}</div>
+            <div class="rank-list inner-list">{top_list_html}</div>
+            {toggle_inner_btn}
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_inner_circle.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
@@ -684,14 +688,18 @@ def gen_html(d, contacts, path):
                     return ', '.join(names)
 
             gc_html = ''.join([
-                f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{format_group_name(gc)}</span><span class="rank-count">{gc["msg_count"]:,}</span></div>'
-                for i, gc in enumerate(d['group_leaderboard'][:5], 1)
+                f'<div class="rank-item{" hidden-group" if i>5 else ""}"><span class="rank-num">{i}</span><span class="rank-name">{format_group_name(gc)}</span><span class="rank-count">{gc["msg_count"]:,}</span></div>'
+                for i, gc in enumerate(d['group_leaderboard'][:10], 1)
             ])
+            toggle_group_btn = ''
+            if len(d['group_leaderboard']) > 5:
+                toggle_group_btn = '<button class="toggle-busiest-btn" onclick="toggleGroup(this)">Show full top 10</button>'
             slides.append(f'''
             <div class="slide orange-bg">
                 <div class="slide-label">// TOP GROUP CHATS</div>
                 <div class="slide-text">your most active groups</div>
-                <div class="rank-list">{gc_html}</div>
+                <div class="rank-list group-list">{gc_html}</div>
+                {toggle_group_btn}
                 <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_top_groups.png', this)">📸 Save</button>
                 <div class="slide-watermark">wrap2025.com</div>
             </div>''')
