@@ -378,6 +378,64 @@ def analyze(ts_start, ts_jun, contacts):
         d['starter_pct'] = round((you_started / r[0][1]) * 100)
     else:
         d['starter_pct'] = 50
+
+    # Longest streak: consecutive days with a single person (1:1 only)
+    streak_rows = q(f"""{one_on_one_cte}
+        SELECT h.id, DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) d
+        FROM message m
+        JOIN handle h ON m.handle_id = h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        GROUP BY h.id, d
+        ORDER BY h.id, d
+    """)
+    best_streak = None
+    from datetime import datetime as dt2, timedelta
+    streaks = {}
+    for handle, dstr in streak_rows:
+        if handle not in streaks:
+            streaks[handle] = {'last': None, 'current_len': 0, 'start': None, 'end': None, 'best': (0, None, None)}
+        cur = streaks[handle]
+        cur_day = dt2.strptime(dstr, '%Y-%m-%d').date()
+        if cur['last'] and cur_day == cur['last'] + timedelta(days=1):
+            cur['current_len'] += 1
+            cur['end'] = cur_day
+        else:
+            cur['current_len'] = 1
+            cur['start'] = cur_day
+            cur['end'] = cur_day
+        cur['last'] = cur_day
+        if cur['current_len'] > cur['best'][0]:
+            cur['best'] = (cur['current_len'], cur['start'], cur['end'])
+    for handle, info in streaks.items():
+        length, start_d, end_d = info['best']
+        if length and (best_streak is None or length > best_streak['length']):
+            best_streak = {'handle': handle, 'length': length, 'start': start_d, 'end': end_d}
+    d['streak'] = best_streak
+
+    # Message marathon: single-day convo with most messages (1:1 only)
+    r = q(f"""{one_on_one_cte}
+        SELECT h.id,
+               DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) d,
+               COUNT(*) c,
+               MIN(m.date/1000000000+978307200) min_ts,
+               MAX(m.date/1000000000+978307200) max_ts
+        FROM message m
+        JOIN handle h ON m.handle_id = h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        GROUP BY h.id, d
+        ORDER BY c DESC
+        LIMIT 1
+    """)
+    if r:
+        h_id, d_str, cnt, min_ts, max_ts = r[0]
+        duration_hours = round(max((max_ts - min_ts) / 3600.0, 0), 1)
+        d['marathon'] = {'handle': h_id, 'date': d_str, 'count': cnt, 'hours': duration_hours}
+    else:
+        d['marathon'] = None
     
     # Personality
     s = d['stats']
