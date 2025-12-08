@@ -6,19 +6,19 @@ Your texting habits, exposed. A Spotify Wrapped-style visualization of your iMes
 
 ## Features
 
-- **Total messages** - sent, received, per day
-- **Top 5 contacts** - your inner circle
-- **Texting personality** - based on your habits
-- **Response time** - how fast you reply
-- **3AM bestie** - late night conversations
-- **Heating up** - growing relationships
-- **Ghosted** - who stopped texting
-- **Down bad** - who you simp for
-- **Busiest day** - your most unhinged day
-- **Who texts first** - conversation initiator %
-- **Group chat stats** - your group chat activity overview
-- **Top group chats** - your most active group conversations
-- **Contribution graph** - GitHub-style activity heatmap of your messaging throughout the year
+- **Total messages + words** – sent, received, per day
+- **Inner circle** – top person + top 10 contacts (expandable)
+- **Group chats** – overview + expandable top 10 groups on one slide
+- **Personality** – diagnosis with starter %, reply time, sent/recv ratio, peak day/hour
+- **Who texts first** – conversation initiator %
+- **Response time** – how fast you reply
+- **3AM bestie** – late night conversations (midnight–5am)
+- **Busiest day** – your wildest day with top 10 people from that day (expandable)
+- **Grind + marathon** – longest streak of daily texting and biggest single-day 1:1 marathon
+- **Vibe check** – who’s heating up (H2 > H1) vs ghosted (dropped after June)
+- **Biggest fan / Down bad** – who texts you most vs who you text most
+- **Peak hours** – most active day/hour
+- **Top emojis** – your most-used emoji lineup
 
 ## Installation
 
