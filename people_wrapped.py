@@ -43,17 +43,36 @@ For each contact:
 2. Write a personal summary based on the messages you see
 3. Save it back to the JSON with the summary field added
 
-Write something that would make the user smile - inside jokes, memorable moments,
-how the relationship evolved. Be specific, quote messages when they capture something real.
+### CRITICAL: What makes a GOOD summary vs BAD summary
 
-Examples:
+BAD (generic AI slop - DO NOT WRITE THIS):
+"2025 brought an unexpected friendship with relentless hustle. You've had a front-row
+seat to intellectually stimulating conversations. His vibe-coded networking and
+thoughtful essay-driven approach connected you both."
 
-"You and Alex started 2025 with big dreams and bigger spreadsheets. The 'Moonshot
-Monday' ritual you invented ('What if we just... did it?') became a running joke
-that somehow turned into three actual projects."
+GOOD (specific, quotes real messages, tells a story):
+"You and Sudarshan—'Suds'—built a relationship through 2,000+ messages that started
+with 'Hey Nikurj, this is Suds' and evolved into you becoming his closest advisor as
+he raised SF1, his first fund. Early on, he walked with you and baby Rohi in a stroller
+outside your Burlingame house. Your response revealed your own hesitation: 'I don't
+have the balls to start my fund so try to help as many folks who have the courage to.'
+When he pitched Greenoaks, your feedback cut: 'Nothing about this says you're special
+to Greenoaks.' No sugar-coating—just truth."
 
-"Mom was your steady anchor through a chaotic year. When you shared your promotion
-news, her 'I knew it. I always knew it' hit different - not surprised, just proud."
+The difference:
+- BAD uses generic adjectives ("relentless", "intellectually stimulating", "vibe-coded")
+- GOOD quotes actual messages ("Hey Nikurj, this is Suds", "I don't have the balls")
+- BAD summarizes traits ("thoughtful essay-driven approach")
+- GOOD tells specific stories (walking with baby Rohi, the Greenoaks pitch)
+- BAD feels like AI wrote it
+- GOOD feels like a friend wrote it who actually read the messages
+
+RULES:
+1. QUOTE actual messages - use their exact words in quotes
+2. NAME specific things - companies, deals, dates, places, people mentioned
+3. NEVER use: "relentless", "intellectually stimulating", "vibe-coded", "hustle"
+4. Tell STORIES not traits - what happened, not what they're like
+5. Include the awkward/real moments - that's what makes it personal
 
 IMPORTANT: Do NOT use Task tool, parallel agents, or write Python scripts.
 YOU are the AI. Just read and write directly.
