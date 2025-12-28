@@ -43,17 +43,28 @@ For each contact:
 2. Write a personal summary based on the messages you see
 3. Save it back to the JSON with the summary field added
 
-Write something that would make the user smile - inside jokes, memorable moments,
-how the relationship evolved. Be specific, quote messages when they capture something real.
+### CRITICAL: What makes a GOOD summary vs BAD summary
 
-Examples:
+BAD summaries use generic adjectives and describe personality traits:
+- "relentless hustle", "intellectually stimulating", "vibe-coded networking"
+- "unwavering support", "infectious energy", "thoughtful approach"
+- These could be written WITHOUT reading the messages - that's how you know they're bad
 
-"You and Alex started 2025 with big dreams and bigger spreadsheets. The 'Moonshot
-Monday' ritual you invented ('What if we just... did it?') became a running joke
-that somehow turned into three actual projects."
+GOOD summaries quote actual messages and describe specific events:
+- Pull their exact words in quotes: when they said "...", their reply "..."
+- Reference specific things from the conversation: the trip, the project, the decision
+- Tell what HAPPENED, not what they're LIKE
 
-"Mom was your steady anchor through a chaotic year. When you shared your promotion
-news, her 'I knew it. I always knew it' hit different - not surprised, just proud."
+The test: Could this summary be written without reading the messages?
+- If YES → it's generic, rewrite it
+- If NO → it's grounded in the actual conversation, keep it
+
+RULES:
+1. QUOTE their words - find the memorable lines from the actual messages
+2. BE SPECIFIC - the trip to X, the project about Y, the debate over Z
+3. AVOID generic adjectives - no "amazing", "incredible", "inspiring"
+4. TELL WHAT HAPPENED - events and moments, not personality descriptions
+5. BE HONEST - if the messages are mostly logistics, say that; don't invent depth
 
 IMPORTANT: Do NOT use Task tool, parallel agents, or write Python scripts.
 YOU are the AI. Just read and write directly.
