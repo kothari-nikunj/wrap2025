@@ -34,12 +34,17 @@ The "trick" is that Claude Code itself IS the AI - no external API call needed.
 
 ## FOR CLAUDE CODE
 
-When this script prints "CLAUDE CODE: Please generate summaries...", read each JSON
-file in people_wrapped_data/ and write a personal, specific summary of that relationship.
+When this script prints "CLAUDE CODE: Please generate summaries...", YOU are the AI.
+Read each JSON file and write a summary directly. Do not write Python scripts or call
+any API - you ARE the language model, just read the messages and write the summary.
 
-The messages array contains the full year of conversation. Write something that would
-make the user smile - pull out inside jokes, memorable moments, how the relationship
-evolved. Be specific, quote messages when they capture something real.
+For each contact:
+1. Read the JSON file (use limit=2000 for large files)
+2. Write a personal summary based on the messages you see
+3. Save it back to the JSON with the summary field added
+
+Write something that would make the user smile - inside jokes, memorable moments,
+how the relationship evolved. Be specific, quote messages when they capture something real.
 
 Examples:
 
@@ -50,11 +55,8 @@ that somehow turned into three actual projects."
 "Mom was your steady anchor through a chaotic year. When you shared your promotion
 news, her 'I knew it. I always knew it' hit different - not surprised, just proud."
 
-"This year with Sarah was about building something real. From apartment hunting in
-February ('this one has LIGHT') to the Thanksgiving trip that almost broke you both,
-you came out stronger."
-
-IMPORTANT: Do NOT use the Task tool or parallel agents. Process each contact directly.
+IMPORTANT: Do NOT use Task tool, parallel agents, or write Python scripts.
+YOU are the AI. Just read and write directly.
 Use /model sonnet for larger context. After all summaries: python3 people_wrapped.py build
 
 ---
