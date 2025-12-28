@@ -45,34 +45,26 @@ For each contact:
 
 ### CRITICAL: What makes a GOOD summary vs BAD summary
 
-BAD (generic AI slop - DO NOT WRITE THIS):
-"2025 brought an unexpected friendship with relentless hustle. You've had a front-row
-seat to intellectually stimulating conversations. His vibe-coded networking and
-thoughtful essay-driven approach connected you both."
+BAD summaries use generic adjectives and describe personality traits:
+- "relentless hustle", "intellectually stimulating", "vibe-coded networking"
+- "unwavering support", "infectious energy", "thoughtful approach"
+- These could be written WITHOUT reading the messages - that's how you know they're bad
 
-GOOD (specific, quotes real messages, tells a story):
-"You and Sudarshan—'Suds'—built a relationship through 2,000+ messages that started
-with 'Hey Nikurj, this is Suds' and evolved into you becoming his closest advisor as
-he raised SF1, his first fund. Early on, he walked with you and baby Rohi in a stroller
-outside your Burlingame house. Your response revealed your own hesitation: 'I don't
-have the balls to start my fund so try to help as many folks who have the courage to.'
-When he pitched Greenoaks, your feedback cut: 'Nothing about this says you're special
-to Greenoaks.' No sugar-coating—just truth."
+GOOD summaries quote actual messages and describe specific events:
+- Pull their exact words in quotes: when they said "...", their reply "..."
+- Reference specific things from the conversation: the trip, the project, the decision
+- Tell what HAPPENED, not what they're LIKE
 
-The difference:
-- BAD uses generic adjectives ("relentless", "intellectually stimulating", "vibe-coded")
-- GOOD quotes actual messages ("Hey Nikurj, this is Suds", "I don't have the balls")
-- BAD summarizes traits ("thoughtful essay-driven approach")
-- GOOD tells specific stories (walking with baby Rohi, the Greenoaks pitch)
-- BAD feels like AI wrote it
-- GOOD feels like a friend wrote it who actually read the messages
+The test: Could this summary be written without reading the messages?
+- If YES → it's generic, rewrite it
+- If NO → it's grounded in the actual conversation, keep it
 
 RULES:
-1. QUOTE actual messages - use their exact words in quotes
-2. NAME specific things - companies, deals, dates, places, people mentioned
-3. NEVER use: "relentless", "intellectually stimulating", "vibe-coded", "hustle"
-4. Tell STORIES not traits - what happened, not what they're like
-5. Include the awkward/real moments - that's what makes it personal
+1. QUOTE their words - find the memorable lines from the actual messages
+2. BE SPECIFIC - the trip to X, the project about Y, the debate over Z
+3. AVOID generic adjectives - no "amazing", "incredible", "inspiring"
+4. TELL WHAT HAPPENED - events and moments, not personality descriptions
+5. BE HONEST - if the messages are mostly logistics, say that; don't invent depth
 
 IMPORTANT: Do NOT use Task tool, parallel agents, or write Python scripts.
 YOU are the AI. Just read and write directly.
