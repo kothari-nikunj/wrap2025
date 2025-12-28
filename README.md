@@ -180,7 +180,7 @@ A: WhatsApp stores its database at:
 
 ## People Wrapped (AI-Powered)
 
-Get AI-generated summaries of your top messaging relationships. Uses Claude Code to analyze your full message history and write personalized insights for each contact. Defaults to 10 contacts (use `--top 25` for more).
+Get AI-generated summaries of your top 25 messaging relationships. Uses Claude Code to analyze your full message history and write personalized insights for each contact.
 
 ### Quick Start
 
@@ -207,7 +207,7 @@ Run python3 people_wrapped.py
 
 The "trick" is that Claude Code itself generates the summaries - no API key needed:
 
-1. Script extracts your top 10 contacts from iMessage/WhatsApp
+1. Script extracts your top 25 contacts from iMessage/WhatsApp
 2. Script prints instructions for Claude Code
 3. Claude Code reads the message files and writes personalized summaries
 4. Script builds a swipeable HTML report

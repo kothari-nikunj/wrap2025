@@ -23,7 +23,7 @@ Note: The --dangerously-skip-permissions flag is needed because Claude Code writ
 
 ## How It Works
 
-1. Script extracts your top 10 contacts from iMessage/WhatsApp databases (use --top 25 for more)
+1. Script extracts your top 25 contacts from iMessage/WhatsApp databases
 2. Script prints "CLAUDE CODE: Please generate summaries..."
 3. Claude Code reads the message files and generates personalized summaries
 4. Script builds a beautiful swipeable HTML report
@@ -32,49 +32,30 @@ The "trick" is that Claude Code itself IS the AI - no external API call needed.
 
 ---
 
-## FOR CLAUDE CODE: Summary Generation Instructions
+## FOR CLAUDE CODE
 
-CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE:
-- Do NOT use the Task tool, Skill tool, or any agents/subagents
-- Do NOT dispatch parallel agents
-- Do NOT use any skills like "dispatching-parallel-agents" or "brainstorming"
-- Process each contact yourself, one at a time, in this session
-- Use /model sonnet to switch to Sonnet for larger context window
-- When saving summaries, use the Write tool (not Edit) to avoid permission prompts
+When this script prints "CLAUDE CODE: Please generate summaries...", read each JSON
+file in people_wrapped_data/ and write a personal, specific summary of that relationship.
 
-When you see "CLAUDE CODE: Please generate summaries...", do this:
+The messages array contains the full year of conversation. Write something that would
+make the user smile - pull out inside jokes, memorable moments, how the relationship
+evolved. Be specific, quote messages when they capture something real.
 
-1. List files in people_wrapped_data/ to find contacts needing summaries
-2. For each JSON file without a "summary" field:
-   a. Read the file (it contains a "messages" array with full chat history)
-   b. Determine relationship type from content:
-      - Parent/family → warm, appreciative, highlight connection moments
-      - Partner → intimate, celebrate growth together
-      - Close friend → playful, can roast, inside jokes front and center
-      - Work colleague → professional wins, lighter touch
-   c. Write 3-4 paragraphs that:
-      - Quote specific messages that capture the relationship
-      - Surface themes, inside jokes, memorable moments
-      - Note how the relationship evolved through the year
-      - Match tone to relationship type
-      - Be honest and specific, not generic
-   d. Save summary back to the JSON file
+Examples:
 
-Example summaries:
+"You and Alex started 2025 with big dreams and bigger spreadsheets. The 'Moonshot
+Monday' ritual you invented ('What if we just... did it?') became a running joke
+that somehow turned into three actual projects."
 
-Friend: "You and Alex started 2025 with big dreams and bigger spreadsheets.
-The 'Moonshot Monday' ritual you invented ('What if we just... did it?') became
-a running joke that somehow turned into three actual projects."
+"Mom was your steady anchor through a chaotic year. When you shared your promotion
+news, her 'I knew it. I always knew it' hit different - not surprised, just proud."
 
-Parent: "Mom was your steady anchor through a chaotic year. When you shared your
-promotion news, her 'I knew it. I always knew it' hit different - not surprised,
-just proud."
+"This year with Sarah was about building something real. From apartment hunting in
+February ('this one has LIGHT') to the Thanksgiving trip that almost broke you both,
+you came out stronger."
 
-Partner: "This year with Sarah was about building something real. From apartment
-hunting in February ('this one has LIGHT') to the Thanksgiving trip that almost
-broke you both, you came out stronger."
-
-After ALL summaries are done, run: python3 people_wrapped.py build
+IMPORTANT: Do NOT use the Task tool or parallel agents. Process each contact directly.
+Use /model sonnet for larger context. After all summaries: python3 people_wrapped.py build
 
 ---
 """
@@ -1221,14 +1202,7 @@ def print_summary_instructions():
     print("  PEOPLE WRAPPED 2025 - Step 2: Generate Summaries")
     print("=" * 60)
     print()
-    print(f"  {len(needs_summary)} contacts need AI-generated summaries.")
-    print()
-    print("  This step happens in Claude Code. Claude will:")
-    print("  1. Read each contact's messages from the JSON files")
-    print("  2. Generate a personalized 3-4 paragraph summary")
-    print("  3. Save the summary back to the JSON file")
-    print()
-    print("  Contacts to summarize:")
+    print(f"  {len(needs_summary)} contacts need summaries:")
     for c in needs_summary:
         print(f"    - {c['name']} ({c['message_count']:,} messages)")
     print()
@@ -1236,25 +1210,15 @@ def print_summary_instructions():
     print()
     print("  CLAUDE CODE: Please generate summaries for the contacts above.")
     print()
-    print("  CRITICAL: Do NOT use Task tool, Skill tool, or parallel agents.")
-    print("  Process each contact yourself, one at a time, in this session.")
+    print("  Read each JSON file in people_wrapped_data/ and write a personal,")
+    print("  specific summary. Pull out inside jokes, memorable moments, how")
+    print("  the relationship evolved. Be specific, quote when it captures")
+    print("  something real.")
     print()
-    print("  For each contact:")
-    print("  1. Read their JSON file from people_wrapped_data/")
-    print("  2. Analyze the messages array")
-    print("  3. Determine the relationship type from the content:")
-    print("     - Parent/family → warm, appreciative, highlight connection")
-    print("     - Partner → intimate, celebrate growth together")
-    print("     - Close friend → playful, can roast, inside jokes")
-    print("     - Work colleague → professional, lighter touch")
-    print("  4. Write a 3-4 paragraph summary that:")
-    print("     - Quotes specific messages")
-    print("     - Surfaces themes, inside jokes, memorable moments")
-    print("     - Matches tone to the relationship type")
-    print("     - Is honest and specific, not generic")
-    print("  5. Save the summary to the JSON file")
+    print("  IMPORTANT: Do NOT use Task tool or parallel agents.")
+    print("  Use /model sonnet for larger context window.")
     print()
-    print("  After all summaries are generated, run: python3 people_wrapped.py build")
+    print("  When done: python3 people_wrapped.py build")
     print()
 
 
@@ -1266,7 +1230,7 @@ def main():
         epilog="""
 How it works:
   1. Run: python3 people_wrapped.py
-  2. Script extracts your top 10 contacts from iMessage/WhatsApp
+  2. Script extracts your top 25 contacts from iMessage/WhatsApp
   3. Claude Code generates personalized summaries (no API key needed)
   4. Script builds a beautiful swipeable HTML report
 
@@ -1278,14 +1242,14 @@ Commands:
   python3 people_wrapped.py status    Check progress
 
 Options:
-  --top N    Number of contacts to analyze (default: 10, max: 25)
+  --top N    Number of contacts to analyze (default: 25)
 """
     )
     parser.add_argument('command', nargs='?', default='run',
                        choices=['run', 'extract', 'summarize', 'build', 'status'],
                        help='Command to run')
     parser.add_argument('--year', default='2025', help='Year to analyze')
-    parser.add_argument('--top', type=int, default=10, help='Number of top contacts (default: 10)')
+    parser.add_argument('--top', type=int, default=25, help='Number of top contacts (default: 25)')
 
     args = parser.parse_args()
 
