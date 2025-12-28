@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.html
+
+# People Wrapped - personal data (generated at runtime)
+people_wrapped_data/
+people_wrapped_samples/
+sample_messages.py
+summarize_contacts.py

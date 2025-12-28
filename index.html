@@ -875,6 +875,10 @@ kbd {
     background: linear-gradient(90deg, var(--green), #25D366);
 }
 
+.platform-tab.active.people {
+    background: var(--purple);
+}
+
 .platform-tab .icon {
     font-size: 14px;
 }
@@ -1224,6 +1228,10 @@ kbd {
                 <span class="icon">📱💬</span>
                 <span>Combined</span>
             </button>
+            <button class="platform-tab people" onclick="selectPlatform('people')">
+                <span class="icon">🤖</span>
+                <span>People (AI)</span>
+            </button>
         </div>
 
         <div id="imessage-install" class="platform-content active">
@@ -1362,6 +1370,66 @@ kbd {
             </div>
         </div>
 
+        <div id="people-install" class="platform-content">
+            <div class="steps-list">
+                <div class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h3>Install Claude Code</h3>
+                        <p>Get Claude Code from <a href="https://claude.ai/code" target="_blank" style="color: var(--purple); text-decoration: underline;">claude.ai/code</a> if you don't have it</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h3>Grant disk access</h3>
+                        <p>System Settings → Privacy & Security → Full Disk Access → add Terminal</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h3>Download the script</h3>
+                        <p>Paste in Terminal and hit Enter:</p>
+                        <div class="code-block">
+                            <code id="curl-cmd-people">curl -O https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/people_wrapped.py</code>
+                            <button class="copy-btn" onclick="copyCode('curl-cmd-people', this)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <h3>Start Claude Code</h3>
+                        <p>Run with permissions disabled (needed for 25 file writes):</p>
+                        <div class="code-block">
+                            <code id="claude-cmd">claude --dangerously-skip-permissions</code>
+                            <button class="copy-btn" onclick="copyCode('claude-cmd', this)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">5</div>
+                    <div class="step-content">
+                        <h3>Run it in Claude Code</h3>
+                        <p>Type this in Claude Code:</p>
+                        <div class="code-block">
+                            <code id="run-cmd-people">Run python3 people_wrapped.py</code>
+                            <button class="copy-btn" onclick="copyCode('run-cmd-people', this)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="combined-note" style="background: rgba(167, 139, 250, 0.08); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 12px; padding: 16px 20px; margin-top: 24px; font-size: 14px;">
+                <strong style="color: var(--purple);">🤖 AI-Powered Summaries</strong><br>
+                Claude Code reads your full message history and writes personalized 3-4 paragraph summaries for your top 25 contacts. Includes direct quotes, inside jokes, and how the relationship evolved. Takes ~10 minutes.
+            </div>
+        </div>
+
         <div class="warning">
             <strong>⚠️</strong>
             <span>Not enough 2025 messages? Use the <code>--use-2024</code> flag.</span>
@@ -1469,6 +1537,7 @@ function selectPlatform(platform) {
         if (platform === 'imessage') isActive = tabText.includes('imessage');
         else if (platform === 'whatsapp') isActive = tabText.includes('whatsapp') && !tabText.includes('combined');
         else if (platform === 'combined') isActive = tabText.includes('combined');
+        else if (platform === 'people') isActive = tabText.includes('people');
         tab.classList.toggle('active', isActive);
     });
 
@@ -1476,9 +1545,11 @@ function selectPlatform(platform) {
     const imessageInstall = document.getElementById('imessage-install');
     const whatsappInstall = document.getElementById('whatsapp-install');
     const combinedInstall = document.getElementById('combined-install');
+    const peopleInstall = document.getElementById('people-install');
     if (imessageInstall) imessageInstall.classList.toggle('active', platform === 'imessage');
     if (whatsappInstall) whatsappInstall.classList.toggle('active', platform === 'whatsapp');
     if (combinedInstall) combinedInstall.classList.toggle('active', platform === 'combined');
+    if (peopleInstall) peopleInstall.classList.toggle('active', platform === 'people');
 
     // Save preference
     localStorage.setItem('platform', platform);
@@ -1624,7 +1695,7 @@ async function downloadScript(skipScroll = false) {
     const btn = document.querySelector('.download-btn');
     const originalContent = btn ? btn.innerHTML : null;
 
-    const scriptName = currentPlatform === 'whatsapp' ? 'whatsapp_wrapped.py' : currentPlatform === 'combined' ? 'combined_wrapped.py' : 'imessage_wrapped.py';
+    const scriptName = currentPlatform === 'whatsapp' ? 'whatsapp_wrapped.py' : currentPlatform === 'combined' ? 'combined_wrapped.py' : currentPlatform === 'people' ? 'people_wrapped.py' : 'imessage_wrapped.py';
     const scriptUrl = `https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/${scriptName}`;
 
     try {
@@ -1716,9 +1787,9 @@ async function copyScriptForReview() {
     const btnIcon = btn.querySelector('.verify-btn-icon');
     const originalText = btnText.textContent;
 
-    const scriptName = currentPlatform === 'whatsapp' ? 'whatsapp_wrapped.py' : currentPlatform === 'combined' ? 'combined_wrapped.py' : 'imessage_wrapped.py';
+    const scriptName = currentPlatform === 'whatsapp' ? 'whatsapp_wrapped.py' : currentPlatform === 'combined' ? 'combined_wrapped.py' : currentPlatform === 'people' ? 'people_wrapped.py' : 'imessage_wrapped.py';
     const scriptUrl = `https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/${scriptName}`;
-    const dbType = currentPlatform === 'whatsapp' ? 'WhatsApp database' : currentPlatform === 'combined' ? 'iMessage database, WhatsApp database, and AddressBook' : 'iMessage database and AddressBook';
+    const dbType = currentPlatform === 'whatsapp' ? 'WhatsApp database' : currentPlatform === 'combined' ? 'iMessage database, WhatsApp database, and AddressBook' : currentPlatform === 'people' ? 'iMessage database, WhatsApp database, and AddressBook' : 'iMessage database and AddressBook';
 
     try {
         btnText.textContent = 'Fetching script...';
@@ -1784,7 +1855,7 @@ ${scriptContent}`;
 
 // Share functionality for mobile
 async function shareLink() {
-    const platform = currentPlatform === 'whatsapp' ? 'WhatsApp' : currentPlatform === 'combined' ? 'Combined' : 'iMessage';
+    const platform = currentPlatform === 'whatsapp' ? 'WhatsApp' : currentPlatform === 'combined' ? 'Combined' : currentPlatform === 'people' ? 'People' : 'iMessage';
     const shareData = {
         title: `${platform} Wrapped 2025`,
         text: `See your 2025 ${platform} texting stats! Run this on your Mac:`,

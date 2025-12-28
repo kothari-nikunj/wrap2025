@@ -176,6 +176,52 @@ A: WhatsApp stores its database at:
 - `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite` (current version)
 - `~/Library/Containers/com.whatsapp/Data/Library/Application Support/WhatsApp/ChatStorage.sqlite` (older versions)
 
+---
+
+## People Wrapped (AI-Powered)
+
+Get AI-generated summaries of your top 25 messaging relationships. Uses Claude Code to analyze your full message history and write personalized insights for each contact.
+
+### Quick Start
+
+1. Download the script:
+```bash
+curl -O https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/people_wrapped.py
+```
+
+2. Start Claude Code with permissions disabled (needed for 25 file writes):
+```bash
+claude --dangerously-skip-permissions
+```
+
+3. In Claude Code, say:
+```
+Run python3 people_wrapped.py
+```
+
+4. Wait ~10 minutes for extraction + AI summaries
+
+5. Open `people_wrapped_2025.html` in your browser
+
+### How It Works
+
+The "trick" is that Claude Code itself generates the summaries - no API key needed:
+
+1. Script extracts your top 25 contacts from iMessage/WhatsApp
+2. Script prints instructions for Claude Code
+3. Claude Code reads the message files and writes personalized summaries
+4. Script builds a swipeable HTML report
+
+### What You Get
+
+- Personalized 3-4 paragraph summaries for each contact
+- Direct quotes from your conversations
+- Themes, inside jokes, memorable moments
+- How the relationship evolved through the year
+- Tone matched to relationship type (family, partner, friend, colleague)
+
+---
+
 ## Credits
 
 Made by [@nikunj](https://x.com/nikunj)
