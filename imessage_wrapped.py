@@ -110,6 +110,59 @@ def get_name(handle, contacts):
         return contacts[digits[-7:]]
     return handle
 
+def contact_key_and_label(handle, contacts):
+    """
+    Build a stable key for a contact so phone + email from the same person merge.
+    Priority:
+      1) Address book name
+      2) Normalized phone number
+      3) Normalized email
+      4) Raw handle
+    """
+    name = get_name(handle, contacts)
+    clean_name = re.sub(r'\s+', ' ', name).strip() if name else ''
+    lower_handle = handle.lower().strip()
+
+    if clean_name and clean_name.lower() != lower_handle:
+        return f"name:{clean_name.lower()}", clean_name
+
+    digits = normalize_phone(handle)
+    if digits:
+        return f"phone:{digits}", clean_name or digits
+
+    if '@' in handle:
+        return f"email:{lower_handle}", clean_name or lower_handle
+
+    return f"raw:{lower_handle}", clean_name or handle
+
+def aggregate_contacts(rows, contacts):
+    """
+    Merge message counts for multiple handles that belong to the same contact.
+    Returns a sorted list of dicts with name/count/sent/recv/handles.
+    """
+    aggregated = {}
+    for handle, total, sent, recv in rows:
+        key, label = contact_key_and_label(handle, contacts)
+        if key not in aggregated:
+            aggregated[key] = {
+                'name': label,
+                'count': 0,
+                'sent': 0,
+                'recv': 0,
+                'handles': set()
+            }
+        aggregated[key]['count'] += total or 0
+        aggregated[key]['sent'] += sent or 0
+        aggregated[key]['recv'] += recv or 0
+        aggregated[key]['handles'].add(handle)
+
+        # Prefer a real contact name over raw handles when available
+        current_label = aggregated[key]['name']
+        if label and (current_label == handle or current_label == label.lower()):
+            aggregated[key]['name'] = label
+
+    return sorted(aggregated.values(), key=lambda x: x['count'], reverse=True)
+
 def check_access():
     if not os.path.exists(IMESSAGE_DB):
         print("\n[FATAL] Not macOS.")
@@ -130,7 +183,7 @@ def q(sql):
     conn.close()
     return r
 
-def analyze(ts_start, ts_jun):
+def analyze(ts_start, ts_jun, contacts):
     d = {}
 
     # === IDENTIFY 1:1 vs GROUP CHATS ===
@@ -161,10 +214,10 @@ def analyze(ts_start, ts_jun):
         WHERE (date/1000000000+978307200)>{ts_start}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
     """)[0]
-    d['stats'] = (raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0)
+    stats = [raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0]
 
     # Top contacts (1:1 only, excluding 5-6 digit shortcodes like 12345, 123456)
-    d['top'] = q(f"""{one_on_one_cte}
+    top_handles = q(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END)
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
         WHERE (m.date/1000000000+978307200)>{ts_start}
@@ -172,6 +225,19 @@ def analyze(ts_start, ts_jun):
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         GROUP BY h.id ORDER BY t DESC LIMIT 20
     """)
+    d['top'] = aggregate_contacts(top_handles, contacts)
+
+    # Unique people count (merge phone/email for same contact)
+    all_handles = q(f"""{one_on_one_cte}
+        SELECT DISTINCT h.id
+        FROM message m JOIN handle h ON m.handle_id=h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+    """)
+    unique_contact_keys = {contact_key_and_label(row[0], contacts)[0] for row in all_handles}
+    stats[3] = len(unique_contact_keys)
+    d['stats'] = tuple(stats)
 
     # Late night texters (1:1 only, excluding shortcodes)
     d['late'] = q(f"""{one_on_one_cte}
@@ -262,7 +328,7 @@ def analyze(ts_start, ts_jun):
         r = q(f"SELECT COUNT(*) FROM message WHERE text LIKE '%{e}%' AND (date/1000000000+978307200)>{ts_start} AND is_from_me=1")
         counts[e] = r[0][0]
     d['emoji'] = sorted(counts.items(), key=lambda x:-x[1])[:5]
-    
+
     # Total words sent (excluding reactions, empty messages, and attachments-only)
     # Simple approach: count messages with text as minimum, then add extra for spaces
     # This ensures we get at least 1 word per text message
@@ -291,9 +357,25 @@ def analyze(ts_start, ts_jun):
     # NEW: Busiest day
     r = q(f"SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) d, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY c DESC LIMIT 1")
     if r:
-        d['busiest_day'] = (r[0][0], r[0][1])  # ('2025-03-15', 523)
+        busiest_date = r[0][0]
+        d['busiest_day'] = (busiest_date, r[0][1])  # ('2025-03-15', 523)
+
+        # Top 10 people you messaged on that busiest day (1:1 chats only, exclude shortcodes)
+        d['busiest_day_top'] = q(f"""{one_on_one_cte}
+            SELECT h.id, COUNT(*) t
+            FROM message m
+            JOIN handle h ON m.handle_id = h.ROWID
+            WHERE DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) = '{busiest_date}'
+            AND (m.date/1000000000+978307200)>{ts_start}
+            AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+            AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+            GROUP BY h.id
+            ORDER BY t DESC
+            LIMIT 10
+        """)
     else:
         d['busiest_day'] = None
+        d['busiest_day_top'] = []
     
     # NEW: Conversation starter % (who texts first after 4+ hour gap) - 1:1 only
     r = q(f"""
@@ -328,6 +410,64 @@ def analyze(ts_start, ts_jun):
         d['starter_pct'] = round((you_started / r[0][1]) * 100)
     else:
         d['starter_pct'] = 50
+
+    # Longest streak: consecutive days with a single person (1:1 only)
+    streak_rows = q(f"""{one_on_one_cte}
+        SELECT h.id, DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) d
+        FROM message m
+        JOIN handle h ON m.handle_id = h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        GROUP BY h.id, d
+        ORDER BY h.id, d
+    """)
+    best_streak = None
+    from datetime import datetime as dt2, timedelta
+    streaks = {}
+    for handle, dstr in streak_rows:
+        if handle not in streaks:
+            streaks[handle] = {'last': None, 'current_len': 0, 'start': None, 'end': None, 'best': (0, None, None)}
+        cur = streaks[handle]
+        cur_day = dt2.strptime(dstr, '%Y-%m-%d').date()
+        if cur['last'] and cur_day == cur['last'] + timedelta(days=1):
+            cur['current_len'] += 1
+            cur['end'] = cur_day
+        else:
+            cur['current_len'] = 1
+            cur['start'] = cur_day
+            cur['end'] = cur_day
+        cur['last'] = cur_day
+        if cur['current_len'] > cur['best'][0]:
+            cur['best'] = (cur['current_len'], cur['start'], cur['end'])
+    for handle, info in streaks.items():
+        length, start_d, end_d = info['best']
+        if length and (best_streak is None or length > best_streak['length']):
+            best_streak = {'handle': handle, 'length': length, 'start': start_d, 'end': end_d}
+    d['streak'] = best_streak
+
+    # Message marathon: single-day convo with most messages (1:1 only)
+    r = q(f"""{one_on_one_cte}
+        SELECT h.id,
+               DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) d,
+               COUNT(*) c,
+               MIN(m.date/1000000000+978307200) min_ts,
+               MAX(m.date/1000000000+978307200) max_ts
+        FROM message m
+        JOIN handle h ON m.handle_id = h.ROWID
+        WHERE (m.date/1000000000+978307200)>{ts_start}
+        AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        GROUP BY h.id, d
+        ORDER BY c DESC
+        LIMIT 1
+    """)
+    if r:
+        h_id, d_str, cnt, min_ts, max_ts = r[0]
+        duration_hours = round(max((max_ts - min_ts) / 3600.0, 0), 1)
+        d['marathon'] = {'handle': h_id, 'date': d_str, 'count': cnt, 'hours': duration_hours}
+    else:
+        d['marathon'] = None
     
     # Personality
     s = d['stats']
@@ -463,7 +603,7 @@ def analyze(ts_start, ts_jun):
         JOIN group_messages gm ON c.ROWID = gm.chat_id
         GROUP BY c.ROWID
         ORDER BY msg_count DESC
-        LIMIT 5
+        LIMIT 10
     """)
     d['group_leaderboard'] = []
     for row in r:
@@ -504,21 +644,24 @@ def gen_html(d, contacts, path):
     else:
         hr_str = f"{hr-12}PM"
     
-    # Format busiest day
-    from datetime import datetime as dt
-    if d['busiest_day']:
-        bd = dt.strptime(d['busiest_day'][0], '%Y-%m-%d')
-        busiest_str = bd.strftime('%b %d')
-        busiest_count = d['busiest_day'][1]
-    else:
-        busiest_str = "N/A"
-        busiest_count = 0
-
     # Calculate days elapsed in the year for accurate per-day stats
+    from datetime import datetime as dt
     now = dt.now()
     year_start = dt(now.year, 1, 1)
     days_elapsed = max(1, (now - year_start).days)  # At least 1 to avoid div by zero
     msgs_per_day = s[0] // days_elapsed
+
+    # Format busiest day
+    busiest_top = d.get('busiest_day_top') or []
+    if d['busiest_day']:
+        bd = dt.strptime(d['busiest_day'][0], '%Y-%m-%d')
+        busiest_str = bd.strftime('%b %d')
+        busiest_count = d['busiest_day'][1]
+        busiest_mult = round(busiest_count / max(msgs_per_day, 1), 1)
+    else:
+        busiest_str = "N/A"
+        busiest_count = 0
+        busiest_mult = 1.0
 
     slides = []
 
@@ -678,24 +821,26 @@ def gen_html(d, contacts, path):
 
     # Slide 5: Your #1 (only if we have contacts)
     if top:
+        # Slide 4: Inner circle (top person + list)
+        top_list_html = ''.join([
+            f'<div class="rank-item{" hidden-inner" if i>5 else ""}"><span class="rank-num">{i}</span><span class="rank-name">{c["name"]}</span><span class="rank-count">{c["count"]:,}</span></div>'
+            for i, c in enumerate(top[:10], 1)
+        ])
+        toggle_inner_btn = ''
+        if len(top) > 5:
+            toggle_inner_btn = '<button class="toggle-busiest-btn" onclick="toggleInner(this)">Show full top 10</button>'
         slides.append(f'''
         <div class="slide pink-bg">
-            <div class="slide-label">// YOUR #1</div>
-            <div class="slide-text">most texted person</div>
-            <div class="huge-name">{n(top[0][0])}</div>
-            <div class="big-number yellow">{top[0][1]:,}</div>
-            <div class="slide-text">messages</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_your_number_one.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
-        # Slide 5: Top 5
-        top5_html = ''.join([f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{n(h)}</span><span class="rank-count">{t:,}</span></div>' for i,(h,t,_,_) in enumerate(top[:5],1)])
-        slides.append(f'''
-        <div class="slide">
             <div class="slide-label">// INNER CIRCLE</div>
-            <div class="slide-text">your top 5</div>
-            <div class="rank-list">{top5_html}</div>
+            <div class="top-highlight">
+                <div class="slide-text">your #1</div>
+                <div class="huge-name">{top[0]["name"]}</div>
+                <div class="big-number yellow">{top[0]["count"]:,}</div>
+                <div class="slide-text">messages</div>
+            </div>
+            <div class="slide-text">and the rest of your roster</div>
+            <div class="rank-list inner-list">{top_list_html}</div>
+            {toggle_inner_btn}
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_inner_circle.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
@@ -708,24 +853,7 @@ def gen_html(d, contacts, path):
         lurker_label = "LURKER" if lurker_pct > 60 else "CONTRIBUTOR" if lurker_pct < 40 else "BALANCED"
         lurker_class = "yellow" if lurker_pct > 60 else "green" if lurker_pct < 40 else "cyan"
 
-        # Slide 6: Group Chat Overview
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// GROUP CHATS</div>
-            <div class="slide-icon">👥</div>
-            <div class="big-number green">{gs['count']}</div>
-            <div class="slide-text">active group chats</div>
-            <div class="stat-grid">
-                <div class="stat-item"><span class="stat-num">{gs['total']:,}</span><span class="stat-lbl">total msgs</span></div>
-                <div class="stat-item"><span class="stat-num">{gs['sent']:,}</span><span class="stat-lbl">sent</span></div>
-                <div class="stat-item"><span class="stat-num">{round(gs['sent']/max(gs['total'],1)*100)}%</span><span class="stat-lbl">yours</span></div>
-            </div>
-            <div class="badge {lurker_class}">{lurker_label}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_group_chats.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
-        # Slide 7: Group Chat Leaderboard
+        # Slide 6: Group Chat Overview + Leaderboard
         if d['group_leaderboard']:
             # Helper to format group name
             def format_group_name(gc):
@@ -741,17 +869,34 @@ def gen_html(d, contacts, path):
                     return ', '.join(names)
 
             gc_html = ''.join([
-                f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{format_group_name(gc)}</span><span class="rank-count">{gc["msg_count"]:,}</span></div>'
-                for i, gc in enumerate(d['group_leaderboard'][:5], 1)
+                f'<div class="rank-item{" hidden-group" if i>5 else ""}"><span class="rank-num">{i}</span><span class="rank-name">{format_group_name(gc)}</span><span class="rank-count">{gc["msg_count"]:,}</span></div>'
+                for i, gc in enumerate(d['group_leaderboard'][:10], 1)
             ])
-            slides.append(f'''
-            <div class="slide orange-bg">
-                <div class="slide-label">// TOP GROUP CHATS</div>
-                <div class="slide-text">your most active groups</div>
-                <div class="rank-list">{gc_html}</div>
-                <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_top_groups.png', this)">📸 Save</button>
-                <div class="slide-watermark">wrap2025.com</div>
-            </div>''')
+            toggle_group_btn = ''
+            if len(d['group_leaderboard']) > 5:
+                toggle_group_btn = '<button class="toggle-busiest-btn toggle-group-btn" onclick="toggleGroup(this)">Show full top 10</button>'
+        else:
+            gc_html = '<div class="slide-text">no group data</div>'
+            toggle_group_btn = ''
+
+        slides.append(f'''
+        <div class="slide orange-bg">
+            <div class="slide-label">// GROUP CHATS</div>
+            <div class="slide-icon">👥</div>
+            <div class="big-number green">{gs['count']}</div>
+            <div class="slide-text">active group chats</div>
+            <div class="stat-grid">
+                <div class="stat-item"><span class="stat-num">{gs['total']:,}</span><span class="stat-lbl">total msgs</span></div>
+                <div class="stat-item"><span class="stat-num">{gs['sent']:,}</span><span class="stat-lbl">sent</span></div>
+                <div class="stat-item"><span class="stat-num">{round(gs['sent']/max(gs['total'],1)*100)}%</span><span class="stat-lbl">yours</span></div>
+            </div>
+            <div class="badge {lurker_class}">{lurker_label}</div>
+            <div class="slide-text" style="margin-top:18px;">your most active groups</div>
+            <div class="rank-list group-list">{gc_html}</div>
+            {toggle_group_btn}
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_top_groups.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
 
     # Slide 8: Personality
     slides.append(f'''
@@ -803,7 +948,48 @@ def gen_html(d, contacts, path):
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
-    # Slide 12: 3AM Bestie
+    # Slide 12: Grind + marathon (combined)
+    streak_card = ''
+    marathon_card = ''
+    if d.get('streak'):
+        st = d['streak']
+        st_start = st['start'].strftime('%b %d')
+        st_end = st['end'].strftime('%b %d')
+        streak_card = f'''
+        <div class="stat-card">
+            <div class="stat-tag">Streak</div>
+            <div class="stat-name green">{n(st['handle'])}</div>
+            <div class="stat-number yellow">{st['length']}</div>
+            <div class="slide-text">days in a row ({st_start} → {st_end})</div>
+            <div class="slide-text" style="max-width:420px;">consecutive days with at least one message between you two</div>
+        </div>
+        '''
+    if d.get('marathon'):
+        mm = d['marathon']
+        mm_date = dt.strptime(mm['date'], '%Y-%m-%d').strftime('%b %d')
+        marathon_card = f'''
+        <div class="stat-card">
+            <div class="stat-tag">Marathon</div>
+            <div class="stat-name cyan">{n(mm['handle'])}</div>
+            <div class="stat-number yellow">{mm['count']:,}</div>
+            <div class="slide-text">messages on {mm_date} across {mm['hours']}h</div>
+            <div class="slide-text" style="max-width:420px;">1:1 only; duration is first to last ping that day</div>
+        </div>
+        '''
+    if streak_card or marathon_card:
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// GRIND + MARATHON</div>
+            <div class="slide-text">your longest runs</div>
+            <div class="dual-cards">
+                {streak_card or ''}
+                {marathon_card or ''}
+            </div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_grind_marathon.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide 13: 3AM Bestie
     if d['late']:
         ln = d['late'][0]
         slides.append(f'''
@@ -813,24 +999,41 @@ def gen_html(d, contacts, path):
             <div class="huge-name cyan">{n(ln[0])}</div>
             <div class="big-number yellow">{ln[1]}</div>
             <div class="slide-text">late night texts</div>
+            <div class="slide-text" style="max-width:420px;">the friend getting the most pings between midnight and 5am</div>
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_3am_bestie.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
-    # Slide 13: Busiest Day
+    # Slide 14: Busiest Day
     if d['busiest_day']:
+        top_busiest_html = ''
+        if busiest_top:
+            def render_busiest_item(idx, handle, count):
+                hidden_class = " hidden-busiest" if idx > 5 else ""
+                return f'<div class="rank-item{hidden_class}"><span class="rank-num">{idx}</span><span class="rank-name">{n(handle)}</span><span class="rank-count">{count:,}</span></div>'
+
+            top_items = ''.join([render_busiest_item(i, h, c) for i,(h,c) in enumerate(busiest_top,1)])
+            expand_btn = ''
+            if len(busiest_top) > 5:
+                expand_btn = '<button class="toggle-busiest-btn" onclick="toggleBusiest(this)">Show full top 10</button>'
+            top_busiest_html = f'''
+            <div class="slide-text" style="margin-top:18px;">Top people you messaged that day</div>
+            <div class="rank-list busiest-list">{top_items}</div>
+            {expand_btn}'''
         slides.append(f'''
         <div class="slide">
             <div class="slide-label">// BUSIEST DAY</div>
             <div class="slide-text">your most unhinged day</div>
             <div class="big-number orange">{busiest_str}</div>
             <div class="slide-text"><span class="yellow">{busiest_count:,}</span> messages in one day</div>
+            <div class="slide-text">usually <span class="cyan">{msgs_per_day:,}</span> per day → <span class="yellow">{busiest_mult}x</span> spike</div>
             <div class="roast">what happened??</div>
+            {top_busiest_html}
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_busiest_day.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
-    # Slide 14: Biggest fan
+    # Slide 15: Biggest fan
     if d['fan']:
         f = d['fan'][0]
         ratio = round(f[1]/(f[2]+1), 1)
@@ -844,7 +1047,7 @@ def gen_html(d, contacts, path):
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
-    # Slide 15: Down bad
+    # Slide 16: Down bad
     if d['simp']:
         si = d['simp'][0]
         ratio = round(si[1]/(si[2]+1), 1)
@@ -858,28 +1061,23 @@ def gen_html(d, contacts, path):
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
-    # Slide 16: Heating Up
-    if d['heating']:
-        heat_html = ''.join([f'<div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">{n(h)}</span><span class="rank-count green">+{h2-h1}</span></div>' for h,h1,h2 in d['heating'][:5]])
-        slides.append(f'''
-        <div class="slide orange-bg">
-            <div class="slide-label">// HEATING UP</div>
-            <div class="slide-text">getting stronger in H2</div>
-            <div class="rank-list">{heat_html}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_heating_up.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
-    # Slide 17: Ghosted
-    if d['ghosted']:
-        ghost_html = ''.join([f'<div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">{n(h)}</span><span class="rank-count"><span class="green">{b}</span> → <span class="red">{a}</span></span></div>' for h,b,a in d['ghosted'][:5]])
+    # Slide 17: Vibe check (heating + ghosted)
+    if d.get('heating') or d.get('ghosted'):
+        heat_html = ''
+        ghost_html = ''
+        if d.get('heating'):
+            heat_html = ''.join([f'<div class="rank-item"><span class="rank-num">🔥</span><span class="rank-name">{n(h)}</span><span class="rank-count green">+{h2-h1}</span></div>' for h,h1,h2 in d['heating'][:5]])
+        if d.get('ghosted'):
+            ghost_html = ''.join([f'<div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">{n(h)}</span><span class="rank-count"><span class="green">{b}</span> → <span class="red">{a}</span></span></div>' for h,b,a in d['ghosted'][:5]])
         slides.append(f'''
         <div class="slide">
-            <div class="slide-label">// GHOSTED</div>
-            <div class="slide-text">they chose peace</div>
-            <div class="rank-list">{ghost_html}</div>
-            <div class="roast" style="margin-top:16px;">before June → after</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_ghosted.png', this)">📸 Save</button>
+            <div class="slide-label">// VIBE CHECK</div>
+            <div class="slide-text">who got hotter vs who cooled off</div>
+            <div class="dual-cards">
+                {f'<div class="stat-card"><div class="stat-tag">Heating Up</div><div class="note-text">more msgs in H2 than H1</div><div class="rank-list">{heat_html}</div></div>' if heat_html else ''}
+                {f'<div class="stat-card"><div class="stat-tag">Ghosted</div><div class="note-text">dropped off after June</div><div class="rank-list">{ghost_html}</div><div class="note-text" style="margin-top:6px;">before June → after</div></div>' if ghost_html else ''}
+            </div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_vibe_check.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -896,7 +1094,7 @@ def gen_html(d, contacts, path):
         </div>''')
 
     # Final slide: Summary card
-    top3_names = ', '.join([n(h) for h,_,_,_ in top[:3]]) if top else "No contacts"
+    top3_names = ', '.join([c["name"] for c in top[:3]]) if top else "No contacts"
     slides.append(f'''
     <div class="slide summary-slide">
         <div class="summary-card" id="summaryCard">
@@ -1075,8 +1273,38 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .rank-item:first-child .rank-name {{ font-weight:600; color:var(--green); }}
 .rank-item:first-child .rank-count {{ font-size:20px; }}
 .rank-num {{ font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--green); width:36px; text-align:center; }}
-.rank-name {{ flex:1; font-size:16px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.rank-name {{ flex:1; font-size:16px; text-align:left; white-space:normal; word-break:break-word; }}
 .rank-count {{ font-family:var(--font-mono); font-size:18px; font-weight:600; color:var(--yellow); }}
+.rank-list.inner-list .hidden-inner {{ display:none; }}
+.rank-list.inner-list.show-all .hidden-inner {{ display:flex; }}
+.rank-list.group-list .hidden-group {{ display:none; }}
+.rank-list.group-list.show-all .hidden-group {{ display:flex; }}
+.rank-list.busiest-list .hidden-busiest {{ display:none; }}
+.rank-list.busiest-list.show-all .hidden-busiest {{ display:flex; }}
+.dual-cards {{ display:flex; gap:16px; flex-wrap:wrap; justify-content:center; width:100%; max-width:640px; margin-top:14px; }}
+.stat-card {{ flex:1; min-width:260px; padding:16px; border:1px solid rgba(255,255,255,0.1); border-radius:12px; background:rgba(255,255,255,0.03); }}
+.stat-tag {{ font-family:var(--font-pixel); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:6px; }}
+.stat-name {{ font-family:var(--font-body); font-size:18px; font-weight:600; margin:6px 0; }}
+.stat-number {{ font-family:var(--font-mono); font-size:36px; font-weight:600; line-height:1; }}
+.stat-card .rank-item {{ align-items:flex-start; }}
+.note-text {{ font-size:13px; color:var(--muted); margin:6px 0 10px; }}
+.stat-card .slide-text {{ font-size:15px; line-height:1.45; color:var(--muted); }}
+.toggle-busiest-btn {{
+    margin-top:12px;
+    margin-bottom:80px;
+    padding:10px 18px;
+    font-family:var(--font-pixel);
+    font-size:9px;
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.2);
+    background:rgba(255,255,255,0.05);
+    color:var(--text);
+    cursor:pointer;
+}}
+.toggle-group-btn {{ margin-bottom:200px; }}
+.toggle-busiest-btn:hover {{ border-color:var(--green); color:var(--green); }}
 
 .badge {{ display:inline-block; padding:8px 18px; border-radius:24px; font-family:var(--font-pixel); font-size:9px; font-weight:400; text-transform:uppercase; letter-spacing:0.3px; margin-top:20px; border:2px solid; }}
 .badge.green {{ border-color:var(--green); color:var(--green); background:rgba(74,222,128,0.1); }}
@@ -1469,6 +1697,30 @@ const dots = progressEl.querySelectorAll('.dot');
 
 const slides = gallery.querySelectorAll('.slide');
 
+function toggleBusiest(btn) {{
+    const slide = btn.closest('.slide');
+    const list = slide ? slide.querySelector('.busiest-list') : null;
+    if (!list) return;
+    const expanded = list.classList.toggle('show-all');
+    btn.textContent = expanded ? 'Show top 5 only' : 'Show full top 10';
+}}
+
+function toggleInner(btn) {{
+    const slide = btn.closest('.slide');
+    const list = slide ? slide.querySelector('.inner-list') : null;
+    if (!list) return;
+    const expanded = list.classList.toggle('show-all');
+    btn.textContent = expanded ? 'Show top 5 only' : 'Show full top 10';
+}}
+
+function toggleGroup(btn) {{
+    const slide = btn.closest('.slide');
+    const list = slide ? slide.querySelector('.group-list') : null;
+    if (!list) return;
+    const expanded = list.classList.toggle('show-all');
+    btn.textContent = expanded ? 'Show top 5 only' : 'Show full top 10';
+}}
+
 function goTo(idx) {{
     if (idx < 0 || idx >= total) return;
     // Remove active from all slides
@@ -1647,7 +1899,7 @@ def main():
 
     print(f"[*] Analyzing {year}...")
     spinner.start("Reading message database...")
-    data = analyze(ts_start, ts_jun)
+    data = analyze(ts_start, ts_jun, contacts)
     data['year'] = int(year)  # Pass the year to gen_html
     spinner.stop(f"{data['stats'][0]:,} messages analyzed")
 
