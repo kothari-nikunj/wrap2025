@@ -46,6 +46,9 @@ TS_2025 = 1735689600
 TS_JUN_2025 = 1748736000
 TS_2024 = 1704067200
 TS_JUN_2024 = 1717200000
+# End of year timestamps (Dec 31 23:59:59)
+TS_2025_END = 1767225599  # Dec 31, 2025 23:59:59 UTC
+TS_2024_END = 1735689599  # Dec 31, 2024 23:59:59 UTC
 
 def normalize_phone(phone):
     if not phone: return None
@@ -183,7 +186,7 @@ def q(sql):
     conn.close()
     return r
 
-def analyze(ts_start, ts_jun, contacts):
+def analyze(ts_start, ts_end, ts_jun, contacts):
     d = {}
 
     # === IDENTIFY 1:1 vs GROUP CHATS ===
@@ -211,7 +214,7 @@ def analyze(ts_start, ts_jun, contacts):
     raw_stats = q(f"""{one_on_one_cte}
         SELECT COUNT(*), SUM(CASE WHEN is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN is_from_me=0 THEN 1 ELSE 0 END), COUNT(DISTINCT handle_id)
         FROM message m
-        WHERE (date/1000000000+978307200)>{ts_start}
+        WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
     """)[0]
     stats = [raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0]
@@ -220,7 +223,7 @@ def analyze(ts_start, ts_jun, contacts):
     top_handles = q(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END)
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -232,7 +235,7 @@ def analyze(ts_start, ts_jun, contacts):
     all_handles = q(f"""{one_on_one_cte}
         SELECT DISTINCT h.id
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -244,7 +247,7 @@ def analyze(ts_start, ts_jun, contacts):
     # Late night texters (1:1 only, excluding shortcodes)
     d['late'] = q(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) n FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND CAST(strftime('%H',datetime((m.date/1000000000+978307200),'unixepoch','localtime')) AS INT)<5
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
@@ -252,17 +255,17 @@ def analyze(ts_start, ts_jun, contacts):
         GROUP BY h.id HAVING n>5 ORDER BY n DESC LIMIT 5
     """)
     
-    r = q(f"SELECT CAST(strftime('%H',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY h ORDER BY c DESC LIMIT 1")
+    r = q(f"SELECT CAST(strftime('%H',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY h ORDER BY c DESC LIMIT 1")
     d['hour'] = r[0][0] if r else 12
     days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-    r = q(f"SELECT CAST(strftime('%w',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) d, COUNT(*) FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY 2 DESC LIMIT 1")
+    r = q(f"SELECT CAST(strftime('%w',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) d, COUNT(*) FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY d ORDER BY 2 DESC LIMIT 1")
     d['day'] = days[r[0][0]] if r else '???'
     
     # Ghosted (1:1 only, excluding shortcodes)
     d['ghosted'] = q(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=0 AND (m.date/1000000000+978307200)<{ts_jun} THEN 1 ELSE 0 END) b, SUM(CASE WHEN m.is_from_me=0 AND (m.date/1000000000+978307200)>={ts_jun} THEN 1 ELSE 0 END) a
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -273,7 +276,7 @@ def analyze(ts_start, ts_jun, contacts):
     d['heating'] = q(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN (m.date/1000000000+978307200)<{ts_jun} THEN 1 ELSE 0 END) h1, SUM(CASE WHEN (m.date/1000000000+978307200)>={ts_jun} THEN 1 ELSE 0 END) h2
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -284,7 +287,7 @@ def analyze(ts_start, ts_jun, contacts):
     d['fan'] = q(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END) y
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -295,7 +298,7 @@ def analyze(ts_start, ts_jun, contacts):
     d['simp'] = q(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END) y, SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END) t
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -321,7 +324,7 @@ def analyze(ts_start, ts_jun, contacts):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200)>{ts_start}
+            WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT AVG(ts-pt)/60.0 FROM g
@@ -349,7 +352,7 @@ def analyze(ts_start, ts_jun, contacts):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
@@ -385,7 +388,7 @@ def analyze(ts_start, ts_jun, contacts):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
@@ -419,7 +422,7 @@ def analyze(ts_start, ts_jun, contacts):
                    (m.date/1000000000+978307200) ts,
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) prev_ts
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id,
@@ -439,7 +442,7 @@ def analyze(ts_start, ts_jun, contacts):
 
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN text LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
-    r = q(f"SELECT {emoji_cases} FROM message WHERE (date/1000000000+978307200)>{ts_start} AND is_from_me=1")
+    r = q(f"SELECT {emoji_cases} FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} AND is_from_me=1")
     counts = dict(zip(emojis, r[0])) if r else {e: 0 for e in emojis}
     d['emoji'] = sorted(counts.items(), key=lambda x:-x[1])[:5]
 
@@ -451,7 +454,7 @@ def analyze(ts_start, ts_jun, contacts):
             COUNT(*) as msg_count,
             COALESCE(SUM(LENGTH(text) - LENGTH(REPLACE(text, ' ', ''))), 0) as extra_words
         FROM message
-        WHERE (date/1000000000+978307200)>{ts_start}
+        WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end}
         AND is_from_me=1
         AND text IS NOT NULL
         AND LENGTH(text) > 0
@@ -469,7 +472,7 @@ def analyze(ts_start, ts_jun, contacts):
     d['words'] = msg_count + extra_words
     
     # NEW: Busiest day
-    r = q(f"SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) d, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY c DESC LIMIT 1")
+    r = q(f"SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) d, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY d ORDER BY c DESC LIMIT 1")
     if r:
         busiest_date = r[0][0]
         d['busiest_day'] = (busiest_date, r[0][1])  # ('2025-03-15', 523)
@@ -480,7 +483,7 @@ def analyze(ts_start, ts_jun, contacts):
             FROM message m
             JOIN handle h ON m.handle_id = h.ROWID
             WHERE DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) = '{busiest_date}'
-            AND (m.date/1000000000+978307200)>{ts_start}
+            AND (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
             AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -511,7 +514,7 @@ def analyze(ts_start, ts_jun, contacts):
                    (m.date/1000000000+978307200) as ts,
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) as prev_ts
             FROM message m
-            WHERE (m.date/1000000000+978307200)>{ts_start}
+            WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT
@@ -531,7 +534,7 @@ def analyze(ts_start, ts_jun, contacts):
         SELECT h.id, DATE(datetime((m.date/1000000000+978307200),'unixepoch','localtime')) d
         FROM message m
         JOIN handle h ON m.handle_id = h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -571,7 +574,7 @@ def analyze(ts_start, ts_jun, contacts):
                MAX(m.date/1000000000+978307200) max_ts
         FROM message m
         JOIN handle h ON m.handle_id = h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -603,7 +606,7 @@ def analyze(ts_start, ts_jun, contacts):
     daily_counts = q(f"""
         SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) as d, COUNT(*) as c
         FROM message
-        WHERE (date/1000000000+978307200)>{ts_start}
+        WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end}
         GROUP BY d
         ORDER BY d
     """)
@@ -677,11 +680,11 @@ def analyze(ts_start, ts_jun, contacts):
         SELECT
             (SELECT COUNT(DISTINCT chat_id) FROM group_messages gm
              JOIN message m ON gm.msg_id = m.ROWID
-             WHERE (m.date/1000000000+978307200)>{ts_start}) as group_count,
+             WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}) as group_count,
             COUNT(*) as total_msgs,
             SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END) as sent
         FROM message m
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM group_messages)
     """)
     if r and r[0][0]:
@@ -709,7 +712,7 @@ def analyze(ts_start, ts_jun, contacts):
             FROM message m
             JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
             WHERE cmj.chat_id IN (SELECT chat_id FROM group_chats)
-            AND (m.date/1000000000+978307200)>{ts_start}
+            AND (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         )
         SELECT
             c.ROWID as chat_id,
@@ -2098,13 +2101,13 @@ def main():
     contacts = extract_contacts()
     print(f"    ✓ {len(contacts)} indexed")
 
-    ts_start, ts_jun = (TS_2024, TS_JUN_2024) if args.use_2024 else (TS_2025, TS_JUN_2025)
+    ts_start, ts_end, ts_jun = (TS_2024, TS_2024_END, TS_JUN_2024) if args.use_2024 else (TS_2025, TS_2025_END, TS_JUN_2025)
     year = "2024" if args.use_2024 else "2025"
 
     test = q(f"SELECT COUNT(*) FROM message WHERE (date/1000000000+978307200)>{TS_2025}")[0][0]
     if test < 100 and not args.use_2024:
         print(f"    ⚠️  {test} msgs in 2025, using 2024")
-        ts_start, ts_jun = TS_2024, TS_JUN_2024
+        ts_start, ts_end, ts_jun = TS_2024, TS_2024_END, TS_JUN_2024
         year = "2024"
 
     # Set output filename based on year
@@ -2114,7 +2117,7 @@ def main():
 
     print(f"[*] Analyzing {year}...")
     spinner.start("Reading message database...")
-    data = analyze(ts_start, ts_jun, contacts)
+    data = analyze(ts_start, ts_end, ts_jun, contacts)
     data['year'] = int(year)  # Pass the year to gen_html
     spinner.stop(f"{data['stats'][0]:,} messages analyzed")
 

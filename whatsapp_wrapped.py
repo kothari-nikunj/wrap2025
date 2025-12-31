@@ -56,6 +56,9 @@ TS_2025 = 757382400  # Cocoa time for Jan 1, 2025
 TS_JUN_2025 = 770428800  # Cocoa time for Jun 1, 2025
 TS_2024 = 725846400  # Cocoa time for Jan 1, 2024
 TS_JUN_2024 = 738892800  # Cocoa time for Jun 1, 2024
+# End of year timestamps (Dec 31 23:59:59)
+TS_2025_END = 788918399  # Cocoa time for Dec 31, 2025 23:59:59
+TS_2024_END = 757382399  # Cocoa time for Dec 31, 2024 23:59:59
 
 WHATSAPP_DB = None
 
@@ -126,7 +129,7 @@ def q(sql):
     conn.close()
     return r
 
-def analyze(ts_start, ts_jun):
+def analyze(ts_start, ts_end, ts_jun):
     d = {}
 
     # WhatsApp schema:
@@ -151,7 +154,7 @@ def analyze(ts_start, ts_jun):
         SELECT COUNT(*), SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END), COUNT(DISTINCT dm.ZCONTACTJID)
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
     """)[0]
     d['stats'] = (raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0)
 
@@ -160,7 +163,7 @@ def analyze(ts_start, ts_jun):
         SELECT dm.ZCONTACTJID, COUNT(*) t, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END)
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY dm.ZCONTACTJID ORDER BY t DESC LIMIT 20
     """)
 
@@ -168,18 +171,18 @@ def analyze(ts_start, ts_jun):
     d['late'] = q(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, COUNT(*) n FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         AND CAST(strftime('%H',datetime(m.ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT)<5
         GROUP BY dm.ZCONTACTJID HAVING n>5 ORDER BY n DESC LIMIT 5
     """)
 
     # Peak hour
-    r = q(f"SELECT CAST(strftime('%H',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY h ORDER BY c DESC LIMIT 1")
+    r = q(f"SELECT CAST(strftime('%H',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY h ORDER BY c DESC LIMIT 1")
     d['hour'] = r[0][0] if r else 12
 
     # Peak day
     days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-    r = q(f"SELECT CAST(strftime('%w',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) d, COUNT(*) FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY d ORDER BY 2 DESC LIMIT 1")
+    r = q(f"SELECT CAST(strftime('%w',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) d, COUNT(*) FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY d ORDER BY 2 DESC LIMIT 1")
     d['day'] = days[r[0][0]] if r else '???'
 
     # Ghosted (1:1 only) - people who texted before June but not after
@@ -187,7 +190,7 @@ def analyze(ts_start, ts_jun):
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=0 AND m.ZMESSAGEDATE<{ts_jun} THEN 1 ELSE 0 END) b, SUM(CASE WHEN m.ZISFROMME=0 AND m.ZMESSAGEDATE>={ts_jun} THEN 1 ELSE 0 END) a
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY dm.ZCONTACTJID HAVING b>10 AND a<3 ORDER BY b DESC LIMIT 5
     """)
 
@@ -196,7 +199,7 @@ def analyze(ts_start, ts_jun):
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZMESSAGEDATE<{ts_jun} THEN 1 ELSE 0 END) h1, SUM(CASE WHEN m.ZMESSAGEDATE>={ts_jun} THEN 1 ELSE 0 END) h2
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY dm.ZCONTACTJID HAVING h1>20 AND h2>h1*1.5 ORDER BY (h2-h1) DESC LIMIT 5
     """)
 
@@ -205,7 +208,7 @@ def analyze(ts_start, ts_jun):
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END) t, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END) y
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY dm.ZCONTACTJID HAVING t>y*2 AND (t+y)>100 ORDER BY (t*1.0/NULLIF(y,0)) DESC LIMIT 5
     """)
 
@@ -214,7 +217,7 @@ def analyze(ts_start, ts_jun):
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END) y, SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END) t
         FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY dm.ZCONTACTJID HAVING y>t*2 AND (t+y)>100 ORDER BY (y*1.0/NULLIF(t,0)) DESC LIMIT 5
     """)
 
@@ -234,7 +237,7 @@ def analyze(ts_start, ts_jun):
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE>{ts_start}
+            WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         )
         SELECT AVG(ts-pt)/60.0 FROM g
         WHERE ZISFROMME=1 AND pf=0 AND (ts-pt)<86400 AND (ts-pt)>10
@@ -259,7 +262,7 @@ def analyze(ts_start, ts_jun):
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
         FROM response_pairs
@@ -289,7 +292,7 @@ def analyze(ts_start, ts_jun):
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
         FROM response_pairs
@@ -317,7 +320,7 @@ def analyze(ts_start, ts_jun):
                    LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) prev_ts
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID,
                SUM(CASE WHEN ZISFROMME = 1 THEN 1 ELSE 0 END) as you_started,
@@ -334,7 +337,7 @@ def analyze(ts_start, ts_jun):
     # Emoji usage (batch query)
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN ZTEXT LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
-    r = q(f"SELECT {emoji_cases} FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZISFROMME=1")
+    r = q(f"SELECT {emoji_cases} FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} AND ZISFROMME=1")
     counts = dict(zip(emojis, r[0])) if r else {e: 0 for e in emojis}
     d['emoji'] = sorted(counts.items(), key=lambda x:-x[1])[:5]
 
@@ -344,7 +347,7 @@ def analyze(ts_start, ts_jun):
             COUNT(*) as msg_count,
             COALESCE(SUM(LENGTH(ZTEXT) - LENGTH(REPLACE(ZTEXT, ' ', ''))), 0) as extra_words
         FROM ZWAMESSAGE
-        WHERE ZMESSAGEDATE>{ts_start}
+        WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end}
         AND ZISFROMME=1
         AND ZTEXT IS NOT NULL
         AND LENGTH(ZTEXT) > 0
@@ -354,7 +357,7 @@ def analyze(ts_start, ts_jun):
     d['words'] = msg_count + extra_words
 
     # Busiest day
-    r = q(f"SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) d, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY d ORDER BY c DESC LIMIT 1")
+    r = q(f"SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) d, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY d ORDER BY c DESC LIMIT 1")
     if r:
         d['busiest_day'] = (r[0][0], r[0][1])
     else:
@@ -376,7 +379,7 @@ def analyze(ts_start, ts_jun):
                    LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) as prev_ts
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE>{ts_start}
+            WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         )
         SELECT
             SUM(CASE WHEN ZISFROMME=1 THEN 1 ELSE 0 END) as you_started,
@@ -407,7 +410,7 @@ def analyze(ts_start, ts_jun):
     daily_counts = q(f"""
         SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) as d, COUNT(*) as c
         FROM ZWAMESSAGE
-        WHERE ZMESSAGEDATE>{ts_start}
+        WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end}
         GROUP BY d
         ORDER BY d
     """)
@@ -474,11 +477,11 @@ def analyze(ts_start, ts_jun):
         SELECT
             (SELECT COUNT(DISTINCT gm.ZCHATSESSION) FROM group_messages gm
              JOIN ZWAMESSAGE m ON m.Z_PK = gm.msg_id
-             WHERE m.ZMESSAGEDATE>{ts_start}) as group_count,
+             WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}) as group_count,
             COUNT(*) as total_msgs,
             SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END) as sent
         FROM ZWAMESSAGE m
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         AND m.Z_PK IN (SELECT msg_id FROM group_messages)
     """)
     if r and r[0][0]:
@@ -501,7 +504,7 @@ def analyze(ts_start, ts_jun):
             COUNT(*) as msg_count
         FROM ZWAMESSAGE m
         JOIN group_sessions s ON m.ZCHATSESSION = s.Z_PK
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         GROUP BY s.Z_PK
         ORDER BY msg_count DESC
         LIMIT 5
@@ -1714,13 +1717,13 @@ def main():
     contacts = extract_contacts()
     print(f"    ✓ {len(contacts)} indexed")
 
-    ts_start, ts_jun = (TS_2024, TS_JUN_2024) if args.use_2024 else (TS_2025, TS_JUN_2025)
+    ts_start, ts_end, ts_jun = (TS_2024, TS_2024_END, TS_JUN_2024) if args.use_2024 else (TS_2025, TS_2025_END, TS_JUN_2025)
     year = "2024" if args.use_2024 else "2025"
 
     test = q(f"SELECT COUNT(*) FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{TS_2025}")[0][0]
     if test < 100 and not args.use_2024:
         print(f"    ⚠️  {test} msgs in 2025, using 2024")
-        ts_start, ts_jun = TS_2024, TS_JUN_2024
+        ts_start, ts_end, ts_jun = TS_2024, TS_2024_END, TS_JUN_2024
         year = "2024"
 
     # Set output filename based on year
@@ -1730,7 +1733,7 @@ def main():
 
     print(f"[*] Analyzing {year}...")
     spinner.start("Reading message database...")
-    data = analyze(ts_start, ts_jun)
+    data = analyze(ts_start, ts_end, ts_jun)
     data['year'] = int(year)  # Pass the year to gen_html
     spinner.stop(f"{data['stats'][0]:,} messages analyzed")
 

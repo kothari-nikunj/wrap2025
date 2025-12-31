@@ -56,6 +56,9 @@ TS_2025_IMESSAGE = 1735689600
 TS_JUN_2025_IMESSAGE = 1748736000
 TS_2024_IMESSAGE = 1704067200
 TS_JUN_2024_IMESSAGE = 1717200000
+# End of year timestamps (Dec 31 23:59:59)
+TS_2025_END_IMESSAGE = 1767225599  # Dec 31, 2025 23:59:59 UTC
+TS_2024_END_IMESSAGE = 1735689599  # Dec 31, 2024 23:59:59 UTC
 
 # WhatsApp: Cocoa Core Data Time (seconds since Jan 1, 2001)
 COCOA_OFFSET = 978307200
@@ -63,6 +66,9 @@ TS_2025_WHATSAPP = 757382400
 TS_JUN_2025_WHATSAPP = 770428800
 TS_2024_WHATSAPP = 725846400
 TS_JUN_2024_WHATSAPP = 738892800
+# End of year timestamps (Dec 31 23:59:59)
+TS_2025_END_WHATSAPP = 788918399  # Dec 31, 2025 23:59:59
+TS_2024_END_WHATSAPP = 757382399  # Dec 31, 2024 23:59:59
 
 def normalize_phone(phone):
     if not phone: return None
@@ -204,7 +210,7 @@ def q_whatsapp(sql):
     conn.close()
     return r
 
-def analyze_imessage(ts_start, ts_jun):
+def analyze_imessage(ts_start, ts_end, ts_jun):
     """Analyze iMessage data and return stats dict."""
     d = {}
 
@@ -227,7 +233,7 @@ def analyze_imessage(ts_start, ts_jun):
     raw_stats = q_imessage(f"""{one_on_one_cte}
         SELECT COUNT(*), SUM(CASE WHEN is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN is_from_me=0 THEN 1 ELSE 0 END), COUNT(DISTINCT handle_id)
         FROM message m
-        WHERE (date/1000000000+978307200)>{ts_start}
+        WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
     """)[0]
     d['stats'] = (raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0)
@@ -236,7 +242,7 @@ def analyze_imessage(ts_start, ts_jun):
     d['top'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END)
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -246,7 +252,7 @@ def analyze_imessage(ts_start, ts_jun):
     # Late night
     d['late'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, COUNT(*) n FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND CAST(strftime('%H',datetime((m.date/1000000000+978307200),'unixepoch','localtime')) AS INT)<5
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
@@ -255,19 +261,19 @@ def analyze_imessage(ts_start, ts_jun):
     """)
 
     # Peak hour
-    r = q_imessage(f"SELECT CAST(strftime('%H',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY h ORDER BY c DESC LIMIT 1")
+    r = q_imessage(f"SELECT CAST(strftime('%H',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY h ORDER BY c DESC LIMIT 1")
     d['hour'] = r[0][0] if r else 12
 
     # Peak day
     days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-    r = q_imessage(f"SELECT CAST(strftime('%w',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) d, COUNT(*) FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY 2 DESC LIMIT 1")
+    r = q_imessage(f"SELECT CAST(strftime('%w',datetime((date/1000000000+978307200),'unixepoch','localtime')) AS INT) d, COUNT(*) FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY d ORDER BY 2 DESC LIMIT 1")
     d['day'] = days[r[0][0]] if r else '???'
 
     # Ghosted
     d['ghosted'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=0 AND (m.date/1000000000+978307200)<{ts_jun} THEN 1 ELSE 0 END) b, SUM(CASE WHEN m.is_from_me=0 AND (m.date/1000000000+978307200)>={ts_jun} THEN 1 ELSE 0 END) a
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -278,7 +284,7 @@ def analyze_imessage(ts_start, ts_jun):
     d['heating'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN (m.date/1000000000+978307200)<{ts_jun} THEN 1 ELSE 0 END) h1, SUM(CASE WHEN (m.date/1000000000+978307200)>={ts_jun} THEN 1 ELSE 0 END) h2
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -289,7 +295,7 @@ def analyze_imessage(ts_start, ts_jun):
     d['fan'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END) t, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END) y
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -300,7 +306,7 @@ def analyze_imessage(ts_start, ts_jun):
     d['simp'] = q_imessage(f"""{one_on_one_cte}
         SELECT h.id, SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END) y, SUM(CASE WHEN m.is_from_me=0 THEN 1 ELSE 0 END) t
         FROM message m JOIN handle h ON m.handle_id=h.ROWID
-        WHERE (m.date/1000000000+978307200)>{ts_start}
+        WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
         AND h.id NOT LIKE 'urn:%'
@@ -326,7 +332,7 @@ def analyze_imessage(ts_start, ts_jun):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200)>{ts_start}
+            WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT AVG(ts-pt)/60.0 FROM g
@@ -354,7 +360,7 @@ def analyze_imessage(ts_start, ts_jun):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
@@ -390,7 +396,7 @@ def analyze_imessage(ts_start, ts_jun):
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
                    LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
@@ -424,7 +430,7 @@ def analyze_imessage(ts_start, ts_jun):
                    (m.date/1000000000+978307200) ts,
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) prev_ts
             FROM message m
-            WHERE (m.date/1000000000+978307200) > {ts_start}
+            WHERE (m.date/1000000000+978307200) > {ts_start} AND (m.date/1000000000+978307200) < {ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT h.id,
@@ -445,14 +451,14 @@ def analyze_imessage(ts_start, ts_jun):
     # Emojis (batch query)
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN text LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
-    r = q_imessage(f"SELECT {emoji_cases} FROM message WHERE (date/1000000000+978307200)>{ts_start} AND is_from_me=1")
+    r = q_imessage(f"SELECT {emoji_cases} FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} AND is_from_me=1")
     d['emoji'] = dict(zip(emojis, r[0])) if r else {e: 0 for e in emojis}
 
     # Words
     r = q_imessage(f"""
         SELECT COUNT(*), COALESCE(SUM(LENGTH(text) - LENGTH(REPLACE(text, ' ', ''))), 0)
         FROM message
-        WHERE (date/1000000000+978307200)>{ts_start}
+        WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end}
         AND is_from_me=1 AND text IS NOT NULL AND LENGTH(text) > 0
         AND text NOT LIKE 'Loved "%' AND text NOT LIKE 'Liked "%'
         AND text NOT LIKE 'Disliked "%' AND text NOT LIKE 'Laughed at "%'
@@ -462,7 +468,7 @@ def analyze_imessage(ts_start, ts_jun):
     d['words'] = (r[0][0] or 0) + (r[0][1] or 0)
 
     # Busiest day
-    r = q_imessage(f"SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) d, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY c DESC LIMIT 1")
+    r = q_imessage(f"SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) d, COUNT(*) c FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY d ORDER BY c DESC LIMIT 1")
     d['busiest_day'] = (r[0][0], r[0][1]) if r else None
 
     # Starter %
@@ -480,7 +486,7 @@ def analyze_imessage(ts_start, ts_jun):
         convos AS (
             SELECT m.is_from_me, (m.date/1000000000+978307200) as ts,
                    LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) as prev_ts
-            FROM message m WHERE (m.date/1000000000+978307200)>{ts_start}
+            FROM message m WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
             AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
         )
         SELECT SUM(CASE WHEN is_from_me=1 THEN 1 ELSE 0 END), COUNT(*)
@@ -491,7 +497,7 @@ def analyze_imessage(ts_start, ts_jun):
     # Daily counts
     daily_counts = q_imessage(f"""
         SELECT DATE(datetime((date/1000000000+978307200),'unixepoch','localtime')) as d, COUNT(*) as c
-        FROM message WHERE (date/1000000000+978307200)>{ts_start} GROUP BY d ORDER BY d
+        FROM message WHERE (date/1000000000+978307200)>{ts_start} AND (date/1000000000+978307200)<{ts_end} GROUP BY d ORDER BY d
     """)
     d['daily_counts'] = {row[0]: row[1] for row in daily_counts}
 
@@ -512,9 +518,9 @@ def analyze_imessage(ts_start, ts_jun):
     r = q_imessage(f"""{group_chat_cte}
         SELECT
             (SELECT COUNT(DISTINCT chat_id) FROM group_messages gm
-             JOIN message m ON gm.msg_id = m.ROWID WHERE (m.date/1000000000+978307200)>{ts_start}),
+             JOIN message m ON gm.msg_id = m.ROWID WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}),
             COUNT(*), SUM(CASE WHEN m.is_from_me=1 THEN 1 ELSE 0 END)
-        FROM message m WHERE (m.date/1000000000+978307200)>{ts_start}
+        FROM message m WHERE (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         AND m.ROWID IN (SELECT msg_id FROM group_messages)
     """)
     d['group_stats'] = {'count': r[0][0] or 0, 'total': r[0][1] or 0, 'sent': r[0][2] or 0} if r else {'count': 0, 'total': 0, 'sent': 0}
@@ -531,7 +537,7 @@ def analyze_imessage(ts_start, ts_jun):
             SELECT m.ROWID as msg_id, cmj.chat_id FROM message m
             JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
             WHERE cmj.chat_id IN (SELECT chat_id FROM group_chats)
-            AND (m.date/1000000000+978307200)>{ts_start}
+            AND (m.date/1000000000+978307200)>{ts_start} AND (m.date/1000000000+978307200)<{ts_end}
         )
         SELECT c.ROWID, c.display_name, COUNT(*),
             (SELECT COUNT(*) FROM chat_handle_join WHERE chat_id = c.ROWID)
@@ -546,7 +552,7 @@ def analyze_imessage(ts_start, ts_jun):
 
     return d
 
-def analyze_whatsapp(ts_start, ts_jun):
+def analyze_whatsapp(ts_start, ts_end, ts_jun):
     """Analyze WhatsApp data and return stats dict."""
     d = {}
 
@@ -564,7 +570,7 @@ def analyze_whatsapp(ts_start, ts_jun):
     raw_stats = q_whatsapp(f"""{one_on_one_cte}
         SELECT COUNT(*), SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END), COUNT(DISTINCT dm.ZCONTACTJID)
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
     """)[0]
     d['stats'] = (raw_stats[0] or 0, raw_stats[1] or 0, raw_stats[2] or 0, raw_stats[3] or 0)
 
@@ -572,53 +578,53 @@ def analyze_whatsapp(ts_start, ts_jun):
     d['top'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, COUNT(*) t, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END), SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END)
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY dm.ZCONTACTJID ORDER BY t DESC LIMIT 20
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY dm.ZCONTACTJID ORDER BY t DESC LIMIT 20
     """)
 
     # Late night
     d['late'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, COUNT(*) n FROM ZWAMESSAGE m
         JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start}
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         AND CAST(strftime('%H',datetime(m.ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT)<5
         GROUP BY dm.ZCONTACTJID HAVING n>5 ORDER BY n DESC LIMIT 10
     """)
 
     # Peak hour
-    r = q_whatsapp(f"SELECT CAST(strftime('%H',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY h ORDER BY c DESC LIMIT 1")
+    r = q_whatsapp(f"SELECT CAST(strftime('%H',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) h, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY h ORDER BY c DESC LIMIT 1")
     d['hour'] = r[0][0] if r else 12
 
     # Peak day
     days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-    r = q_whatsapp(f"SELECT CAST(strftime('%w',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) d, COUNT(*) FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY d ORDER BY 2 DESC LIMIT 1")
+    r = q_whatsapp(f"SELECT CAST(strftime('%w',datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) AS INT) d, COUNT(*) FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY d ORDER BY 2 DESC LIMIT 1")
     d['day'] = days[r[0][0]] if r else '???'
 
     # Ghosted
     d['ghosted'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=0 AND m.ZMESSAGEDATE<{ts_jun} THEN 1 ELSE 0 END) b, SUM(CASE WHEN m.ZISFROMME=0 AND m.ZMESSAGEDATE>={ts_jun} THEN 1 ELSE 0 END) a
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY dm.ZCONTACTJID HAVING b>10 AND a<3 ORDER BY b DESC LIMIT 10
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY dm.ZCONTACTJID HAVING b>10 AND a<3 ORDER BY b DESC LIMIT 10
     """)
 
     # Heating up
     d['heating'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZMESSAGEDATE<{ts_jun} THEN 1 ELSE 0 END) h1, SUM(CASE WHEN m.ZMESSAGEDATE>={ts_jun} THEN 1 ELSE 0 END) h2
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY dm.ZCONTACTJID HAVING h1>20 AND h2>h1*1.5 ORDER BY (h2-h1) DESC LIMIT 10
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY dm.ZCONTACTJID HAVING h1>20 AND h2>h1*1.5 ORDER BY (h2-h1) DESC LIMIT 10
     """)
 
     # Biggest fan
     d['fan'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END) t, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END) y
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY dm.ZCONTACTJID HAVING t>y*2 AND (t+y)>100 ORDER BY (t*1.0/NULLIF(y,0)) DESC LIMIT 10
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY dm.ZCONTACTJID HAVING t>y*2 AND (t+y)>100 ORDER BY (t*1.0/NULLIF(y,0)) DESC LIMIT 10
     """)
 
     # Simp
     d['simp'] = q_whatsapp(f"""{one_on_one_cte}
         SELECT dm.ZCONTACTJID, SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END) y, SUM(CASE WHEN m.ZISFROMME=0 THEN 1 ELSE 0 END) t
         FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY dm.ZCONTACTJID HAVING y>t*2 AND (t+y)>100 ORDER BY (y*1.0/NULLIF(t,0)) DESC LIMIT 10
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY dm.ZCONTACTJID HAVING y>t*2 AND (t+y)>100 ORDER BY (y*1.0/NULLIF(t,0)) DESC LIMIT 10
     """)
 
     # Response time
@@ -635,7 +641,7 @@ def analyze_whatsapp(ts_start, ts_jun):
                    LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pt,
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE>{ts_start}
+            WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         )
         SELECT AVG(ts-pt)/60.0 FROM g
         WHERE ZISFROMME=1 AND pf=0 AND (ts-pt)<86400 AND (ts-pt)>10
@@ -660,7 +666,7 @@ def analyze_whatsapp(ts_start, ts_jun):
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
         FROM response_pairs
@@ -690,7 +696,7 @@ def analyze_whatsapp(ts_start, ts_jun):
                    LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
         FROM response_pairs
@@ -718,7 +724,7 @@ def analyze_whatsapp(ts_start, ts_jun):
                    LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) prev_ts
             FROM ZWAMESSAGE m
             JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE > {ts_start}
+            WHERE m.ZMESSAGEDATE > {ts_start} AND m.ZMESSAGEDATE < {ts_end}
         )
         SELECT ZCONTACTJID,
                SUM(CASE WHEN ZISFROMME = 1 THEN 1 ELSE 0 END) as you_started,
@@ -735,19 +741,19 @@ def analyze_whatsapp(ts_start, ts_jun):
     # Emojis (batch query)
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN ZTEXT LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
-    r = q_whatsapp(f"SELECT {emoji_cases} FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZISFROMME=1")
+    r = q_whatsapp(f"SELECT {emoji_cases} FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} AND ZISFROMME=1")
     d['emoji'] = dict(zip(emojis, r[0])) if r else {e: 0 for e in emojis}
 
     # Words
     r = q_whatsapp(f"""
         SELECT COUNT(*), COALESCE(SUM(LENGTH(ZTEXT) - LENGTH(REPLACE(ZTEXT, ' ', ''))), 0)
-        FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZISFROMME=1
+        FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} AND ZISFROMME=1
         AND ZTEXT IS NOT NULL AND LENGTH(ZTEXT) > 0
     """)
     d['words'] = (r[0][0] or 0) + (r[0][1] or 0)
 
     # Busiest day
-    r = q_whatsapp(f"SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) d, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY d ORDER BY c DESC LIMIT 1")
+    r = q_whatsapp(f"SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) d, COUNT(*) c FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY d ORDER BY c DESC LIMIT 1")
     d['busiest_day'] = (r[0][0], r[0][1]) if r else None
 
     # Starter %
@@ -763,7 +769,7 @@ def analyze_whatsapp(ts_start, ts_jun):
             SELECT m.ZISFROMME, m.ZMESSAGEDATE as ts,
                    LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) as prev_ts
             FROM ZWAMESSAGE m JOIN dm_messages dm ON m.Z_PK = dm.msg_id
-            WHERE m.ZMESSAGEDATE>{ts_start}
+            WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         )
         SELECT SUM(CASE WHEN ZISFROMME=1 THEN 1 ELSE 0 END), COUNT(*)
         FROM convos WHERE prev_ts IS NULL OR (ts - prev_ts) > 14400
@@ -773,7 +779,7 @@ def analyze_whatsapp(ts_start, ts_jun):
     # Daily counts
     daily_counts = q_whatsapp(f"""
         SELECT DATE(datetime(ZMESSAGEDATE+{COCOA_OFFSET},'unixepoch','localtime')) as d, COUNT(*) as c
-        FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} GROUP BY d ORDER BY d
+        FROM ZWAMESSAGE WHERE ZMESSAGEDATE>{ts_start} AND ZMESSAGEDATE<{ts_end} GROUP BY d ORDER BY d
     """)
     d['daily_counts'] = {row[0]: row[1] for row in daily_counts}
 
@@ -790,9 +796,9 @@ def analyze_whatsapp(ts_start, ts_jun):
     r = q_whatsapp(f"""{group_chat_cte}
         SELECT
             (SELECT COUNT(DISTINCT gm.ZCHATSESSION) FROM group_messages gm
-             JOIN ZWAMESSAGE m ON m.Z_PK = gm.msg_id WHERE m.ZMESSAGEDATE>{ts_start}),
+             JOIN ZWAMESSAGE m ON m.Z_PK = gm.msg_id WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}),
             COUNT(*), SUM(CASE WHEN m.ZISFROMME=1 THEN 1 ELSE 0 END)
-        FROM ZWAMESSAGE m WHERE m.ZMESSAGEDATE>{ts_start}
+        FROM ZWAMESSAGE m WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end}
         AND m.Z_PK IN (SELECT msg_id FROM group_messages)
     """)
     d['group_stats'] = {'count': r[0][0] or 0, 'total': r[0][1] or 0, 'sent': r[0][2] or 0} if r else {'count': 0, 'total': 0, 'sent': 0}
@@ -804,7 +810,7 @@ def analyze_whatsapp(ts_start, ts_jun):
         )
         SELECT s.Z_PK, s.ZPARTNERNAME, COUNT(*)
         FROM ZWAMESSAGE m JOIN group_sessions s ON m.ZCHATSESSION = s.Z_PK
-        WHERE m.ZMESSAGEDATE>{ts_start} GROUP BY s.Z_PK ORDER BY 3 DESC LIMIT 10
+        WHERE m.ZMESSAGEDATE>{ts_start} AND m.ZMESSAGEDATE<{ts_end} GROUP BY s.Z_PK ORDER BY 3 DESC LIMIT 10
     """)
     d['group_leaderboard'] = []
     for row in r:
@@ -2122,18 +2128,20 @@ def main():
 
     if has_imessage:
         ts_start = TS_2024_IMESSAGE if year == "2024" else TS_2025_IMESSAGE
+        ts_end = TS_2024_END_IMESSAGE if year == "2024" else TS_2025_END_IMESSAGE
         ts_jun = TS_JUN_2024_IMESSAGE if year == "2024" else TS_JUN_2025_IMESSAGE
         print(f"[*] Analyzing iMessage {year}...")
         spinner.start("Reading iMessage database...")
-        imessage_data = analyze_imessage(ts_start, ts_jun)
+        imessage_data = analyze_imessage(ts_start, ts_end, ts_jun)
         spinner.stop(f"{imessage_data['stats'][0]:,} iMessage messages analyzed")
 
     if has_whatsapp:
         ts_start = TS_2024_WHATSAPP if year == "2024" else TS_2025_WHATSAPP
+        ts_end = TS_2024_END_WHATSAPP if year == "2024" else TS_2025_END_WHATSAPP
         ts_jun = TS_JUN_2024_WHATSAPP if year == "2024" else TS_JUN_2025_WHATSAPP
         print(f"[*] Analyzing WhatsApp {year}...")
         spinner.start("Reading WhatsApp database...")
-        whatsapp_data = analyze_whatsapp(ts_start, ts_jun)
+        whatsapp_data = analyze_whatsapp(ts_start, ts_end, ts_jun)
         spinner.stop(f"{whatsapp_data['stats'][0]:,} WhatsApp messages analyzed")
 
     print(f"[*] Merging data...")
