@@ -271,9 +271,6 @@ def get_contact_photo(record_id):
     return None
 
 def get_name_imessage(handle, contacts):
-    # Handle URN-style identifiers (business accounts, etc.)
-    if handle.startswith('urn:'):
-        return "Business Account"
     if '@' in handle:
         lookup = handle.lower().strip()
         if lookup in contacts: return contacts[lookup]
