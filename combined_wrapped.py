@@ -334,6 +334,114 @@ def analyze_imessage(ts_start, ts_jun):
     """)
     d['resp'] = int(r[0][0] or 30)
 
+    # Per-person response time: who you reply to fastest (YOUR PRIORITY LIST)
+    d['priority_list'] = q_imessage(f"""
+        WITH chat_participants AS (
+            SELECT chat_id, COUNT(*) as participant_count
+            FROM chat_handle_join GROUP BY chat_id
+        ),
+        one_on_one_messages AS (
+            SELECT m.ROWID as msg_id
+            FROM message m
+            JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+            JOIN chat_participants cp ON cmj.chat_id = cp.chat_id
+            WHERE cp.participant_count = 1
+        ),
+        response_pairs AS (
+            SELECT m.handle_id,
+                   (m.date/1000000000+978307200) ts,
+                   m.is_from_me,
+                   LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
+                   LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
+            FROM message m
+            WHERE (m.date/1000000000+978307200) > {ts_start}
+            AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        )
+        SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
+        FROM response_pairs rp
+        JOIN handle h ON rp.handle_id = h.ROWID
+        WHERE rp.is_from_me = 1 AND rp.pf = 0
+        AND (rp.ts - rp.pt) BETWEEN 10 AND 86400
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        AND h.id NOT LIKE 'urn:%'
+        GROUP BY h.id
+        HAVING reply_count >= 50
+        ORDER BY avg_resp_min ASC
+        LIMIT 10
+    """)
+
+    # Per-person response time: who replies to YOU fastest (WHO DROPS EVERYTHING)
+    d['fast_responders'] = q_imessage(f"""
+        WITH chat_participants AS (
+            SELECT chat_id, COUNT(*) as participant_count
+            FROM chat_handle_join GROUP BY chat_id
+        ),
+        one_on_one_messages AS (
+            SELECT m.ROWID as msg_id
+            FROM message m
+            JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+            JOIN chat_participants cp ON cmj.chat_id = cp.chat_id
+            WHERE cp.participant_count = 1
+        ),
+        response_pairs AS (
+            SELECT m.handle_id,
+                   (m.date/1000000000+978307200) ts,
+                   m.is_from_me,
+                   LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) pt,
+                   LAG(m.is_from_me) OVER (PARTITION BY m.handle_id ORDER BY m.date) pf
+            FROM message m
+            WHERE (m.date/1000000000+978307200) > {ts_start}
+            AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        )
+        SELECT h.id, AVG(rp.ts - rp.pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
+        FROM response_pairs rp
+        JOIN handle h ON rp.handle_id = h.ROWID
+        WHERE rp.is_from_me = 0 AND rp.pf = 1
+        AND (rp.ts - rp.pt) BETWEEN 10 AND 86400
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        AND h.id NOT LIKE 'urn:%'
+        GROUP BY h.id
+        HAVING reply_count >= 50
+        ORDER BY avg_resp_min ASC
+        LIMIT 10
+    """)
+
+    # Per-person initiation breakdown (WHO TEXTS FIRST per person)
+    d['initiation_breakdown'] = q_imessage(f"""
+        WITH chat_participants AS (
+            SELECT chat_id, COUNT(*) as participant_count
+            FROM chat_handle_join GROUP BY chat_id
+        ),
+        one_on_one_messages AS (
+            SELECT m.ROWID as msg_id
+            FROM message m
+            JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+            JOIN chat_participants cp ON cmj.chat_id = cp.chat_id
+            WHERE cp.participant_count = 1
+        ),
+        conversation_starts AS (
+            SELECT m.handle_id, m.is_from_me,
+                   (m.date/1000000000+978307200) ts,
+                   LAG(m.date/1000000000+978307200) OVER (PARTITION BY m.handle_id ORDER BY m.date) prev_ts
+            FROM message m
+            WHERE (m.date/1000000000+978307200) > {ts_start}
+            AND m.ROWID IN (SELECT msg_id FROM one_on_one_messages)
+        )
+        SELECT h.id,
+               SUM(CASE WHEN cs.is_from_me = 1 THEN 1 ELSE 0 END) as you_started,
+               SUM(CASE WHEN cs.is_from_me = 0 THEN 1 ELSE 0 END) as they_started,
+               COUNT(*) as total_convos
+        FROM conversation_starts cs
+        JOIN handle h ON cs.handle_id = h.ROWID
+        WHERE (cs.prev_ts IS NULL OR (cs.ts - cs.prev_ts) > 14400)
+        AND NOT (LENGTH(REPLACE(REPLACE(h.id, '+', ''), '-', '')) BETWEEN 5 AND 6 AND REPLACE(REPLACE(h.id, '+', ''), '-', '') GLOB '[0-9]*')
+        AND h.id NOT LIKE 'urn:%'
+        GROUP BY h.id
+        HAVING total_convos >= 5
+        ORDER BY total_convos DESC
+        LIMIT 20
+    """)
+
     # Emojis (batch query)
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN text LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
@@ -534,6 +642,96 @@ def analyze_whatsapp(ts_start, ts_jun):
     """)
     d['resp'] = int(r[0][0] or 30)
 
+    # Per-person response time: who you reply to fastest (YOUR PRIORITY LIST)
+    d['priority_list'] = q_whatsapp(f"""
+        WITH dm_sessions AS (
+            SELECT Z_PK, ZCONTACTJID FROM ZWACHATSESSION WHERE ZSESSIONTYPE = 0
+        ),
+        dm_messages AS (
+            SELECT m.Z_PK as msg_id, m.ZCHATSESSION, s.ZCONTACTJID
+            FROM ZWAMESSAGE m
+            JOIN dm_sessions s ON m.ZCHATSESSION = s.Z_PK
+        ),
+        response_pairs AS (
+            SELECT dm.ZCONTACTJID,
+                   m.ZMESSAGEDATE ts,
+                   m.ZISFROMME,
+                   LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pt,
+                   LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
+            FROM ZWAMESSAGE m
+            JOIN dm_messages dm ON m.Z_PK = dm.msg_id
+            WHERE m.ZMESSAGEDATE > {ts_start}
+        )
+        SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
+        FROM response_pairs
+        WHERE ZISFROMME = 1 AND pf = 0
+        AND (ts - pt) BETWEEN 10 AND 86400
+        GROUP BY ZCONTACTJID
+        HAVING reply_count >= 50
+        ORDER BY avg_resp_min ASC
+        LIMIT 10
+    """)
+
+    # Per-person response time: who replies to YOU fastest (WHO DROPS EVERYTHING)
+    d['fast_responders'] = q_whatsapp(f"""
+        WITH dm_sessions AS (
+            SELECT Z_PK, ZCONTACTJID FROM ZWACHATSESSION WHERE ZSESSIONTYPE = 0
+        ),
+        dm_messages AS (
+            SELECT m.Z_PK as msg_id, m.ZCHATSESSION, s.ZCONTACTJID
+            FROM ZWAMESSAGE m
+            JOIN dm_sessions s ON m.ZCHATSESSION = s.Z_PK
+        ),
+        response_pairs AS (
+            SELECT dm.ZCONTACTJID,
+                   m.ZMESSAGEDATE ts,
+                   m.ZISFROMME,
+                   LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pt,
+                   LAG(m.ZISFROMME) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) pf
+            FROM ZWAMESSAGE m
+            JOIN dm_messages dm ON m.Z_PK = dm.msg_id
+            WHERE m.ZMESSAGEDATE > {ts_start}
+        )
+        SELECT ZCONTACTJID, AVG(ts - pt)/60.0 as avg_resp_min, COUNT(*) as reply_count
+        FROM response_pairs
+        WHERE ZISFROMME = 0 AND pf = 1
+        AND (ts - pt) BETWEEN 10 AND 86400
+        GROUP BY ZCONTACTJID
+        HAVING reply_count >= 50
+        ORDER BY avg_resp_min ASC
+        LIMIT 10
+    """)
+
+    # Per-person initiation breakdown (WHO TEXTS FIRST per person)
+    d['initiation_breakdown'] = q_whatsapp(f"""
+        WITH dm_sessions AS (
+            SELECT Z_PK, ZCONTACTJID FROM ZWACHATSESSION WHERE ZSESSIONTYPE = 0
+        ),
+        dm_messages AS (
+            SELECT m.Z_PK as msg_id, m.ZCHATSESSION, s.ZCONTACTJID
+            FROM ZWAMESSAGE m
+            JOIN dm_sessions s ON m.ZCHATSESSION = s.Z_PK
+        ),
+        conversation_starts AS (
+            SELECT dm.ZCONTACTJID, m.ZISFROMME,
+                   m.ZMESSAGEDATE ts,
+                   LAG(m.ZMESSAGEDATE) OVER (PARTITION BY m.ZCHATSESSION ORDER BY m.ZMESSAGEDATE) prev_ts
+            FROM ZWAMESSAGE m
+            JOIN dm_messages dm ON m.Z_PK = dm.msg_id
+            WHERE m.ZMESSAGEDATE > {ts_start}
+        )
+        SELECT ZCONTACTJID,
+               SUM(CASE WHEN ZISFROMME = 1 THEN 1 ELSE 0 END) as you_started,
+               SUM(CASE WHEN ZISFROMME = 0 THEN 1 ELSE 0 END) as they_started,
+               COUNT(*) as total_convos
+        FROM conversation_starts
+        WHERE prev_ts IS NULL OR (ts - prev_ts) > 14400
+        GROUP BY ZCONTACTJID
+        HAVING total_convos >= 5
+        ORDER BY total_convos DESC
+        LIMIT 20
+    """)
+
     # Emojis (batch query)
     emojis = ['😂','❤️','😭','🔥','💀','✨','🙏','👀','💯','😈']
     emoji_cases = ', '.join([f"SUM(CASE WHEN ZTEXT LIKE '%{e}%' THEN 1 ELSE 0 END)" for e in emojis])
@@ -721,6 +919,38 @@ def merge_data(imessage_data, whatsapp_data, imessage_contacts, whatsapp_contact
         for h, y, t in whatsapp_data.get('simp', []):
             simp_combined.append((get_name(h, 'whatsapp'), y, t))
     d['simp'] = sorted(simp_combined, key=lambda x: -(x[1] / max(x[2], 1)))[:5]
+
+    # Merge priority_list (who you reply to fastest)
+    priority_combined = []
+    if has_imessage:
+        for h, t, c in imessage_data.get('priority_list', []):
+            priority_combined.append((get_name(h, 'imessage'), t, c))
+    if has_whatsapp:
+        for h, t, c in whatsapp_data.get('priority_list', []):
+            priority_combined.append((get_name(h, 'whatsapp'), t, c))
+    # Sort by response time (ascending = fastest first)
+    d['priority_list'] = sorted(priority_combined, key=lambda x: x[1])[:5]
+
+    # Merge fast_responders (who replies to YOU fastest)
+    fast_combined = []
+    if has_imessage:
+        for h, t, c in imessage_data.get('fast_responders', []):
+            fast_combined.append((get_name(h, 'imessage'), t, c))
+    if has_whatsapp:
+        for h, t, c in whatsapp_data.get('fast_responders', []):
+            fast_combined.append((get_name(h, 'whatsapp'), t, c))
+    d['fast_responders'] = sorted(fast_combined, key=lambda x: x[1])[:5]
+
+    # Merge initiation_breakdown (who texts first per person)
+    initiation_combined = []
+    if has_imessage:
+        for h, y, t, tc in imessage_data.get('initiation_breakdown', []):
+            initiation_combined.append((get_name(h, 'imessage'), y, t, tc))
+    if has_whatsapp:
+        for h, y, t, tc in whatsapp_data.get('initiation_breakdown', []):
+            initiation_combined.append((get_name(h, 'whatsapp'), y, t, tc))
+    # Sort by total conversations (most active relationships first)
+    d['initiation_breakdown'] = sorted(initiation_combined, key=lambda x: -x[3])[:20]
 
     # Weighted average response time
     im_resp = imessage_data.get('resp', 30) if has_imessage else 30
@@ -912,7 +1142,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="stat-item"><span class="stat-num">{s[1]:,}</span><span class="stat-lbl">sent</span></div>
             <div class="stat-item"><span class="stat-num">{s[2]:,}</span><span class="stat-lbl">received</span></div>
         </div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_total_messages.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_total_messages.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -938,7 +1168,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
                     <span class="platform-count">{wa_stats[0]:,}</span>
                 </div>
             </div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_platform_split.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_platform_split.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -950,7 +1180,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         <div class="big-number cyan">{words_display}</div>
         <div class="slide-text">words you typed</div>
         <div class="roast">that's about {pages:,} pages of a novel</div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_word_count.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_word_count.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -1040,7 +1270,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
                 <div class="contrib-stat"><span class="contrib-stat-num">{d['busiest_month']}</span><span class="contrib-stat-lbl">busiest month</span></div>
                 <div class="contrib-stat"><span class="contrib-stat-num">{d['quiet_days']}</span><span class="contrib-stat-lbl">quiet days</span></div>
             </div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_contribution_graph.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_contribution_graph.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1055,7 +1285,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="huge-name">{t['name']}</div>
             <div class="big-number yellow">{t['total']:,}</div>
             <div class="slide-text">messages <span class="source-badge">{source_icon}</span></div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_your_number_one.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_your_number_one.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1069,7 +1299,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-label">// INNER CIRCLE</div>
             <div class="slide-text">your top 5 across all platforms</div>
             <div class="rank-list">{top5_html}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_inner_circle.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_inner_circle.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1080,8 +1310,16 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         lurker_label = "LURKER" if lurker_pct > 60 else "CONTRIBUTOR" if lurker_pct < 40 else "BALANCED"
         lurker_class = "yellow" if lurker_pct > 60 else "green" if lurker_pct < 40 else "cyan"
 
+        if d['group_leaderboard']:
+            gc_html = ''.join([
+                f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{gc["name"]}</span><span class="rank-count">{gc["msg_count"]:,}</span><span class="source-icon">{"📱" if gc.get("source") == "imessage" else "💬"}</span></div>'
+                for i, gc in enumerate(d['group_leaderboard'][:5], 1)
+            ])
+        else:
+            gc_html = '<div class="slide-text">no group data</div>'
+
         slides.append(f'''
-        <div class="slide">
+        <div class="slide orange-bg">
             <div class="slide-label">// GROUP CHATS</div>
             <div class="slide-icon">👥</div>
             <div class="big-number gradient">{gs['count']}</div>
@@ -1092,23 +1330,11 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
                 <div class="stat-item"><span class="stat-num">{round(gs['sent']/max(gs['total'],1)*100)}%</span><span class="stat-lbl">yours</span></div>
             </div>
             <div class="badge {lurker_class}">{lurker_label}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_group_chats.png', this)">📸 Save</button>
+            <div class="slide-text" style="margin-top:18px;">your most active groups</div>
+            <div class="rank-list group-list">{gc_html}</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_group_chats.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
-
-        if d['group_leaderboard']:
-            gc_html = ''.join([
-                f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{gc["name"]}</span><span class="rank-count">{gc["msg_count"]:,}</span><span class="source-icon">{"📱" if gc.get("source") == "imessage" else "💬"}</span></div>'
-                for i, gc in enumerate(d['group_leaderboard'][:5], 1)
-            ])
-            slides.append(f'''
-            <div class="slide orange-bg">
-                <div class="slide-label">// TOP GROUP CHATS</div>
-                <div class="slide-text">your most active groups</div>
-                <div class="rank-list">{gc_html}</div>
-                <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_top_groups.png', this)">📸 Save</button>
-                <div class="slide-watermark">wrap2025.com</div>
-            </div>''')
 
     # Personality slide
     slides.append(f'''
@@ -1117,7 +1343,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         <div class="slide-text">texting personality</div>
         <div class="personality-type">{ptype}</div>
         <div class="roast">"{proast}"</div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_personality.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_personality.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -1131,7 +1357,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         <div class="big-number {starter_class}">{d['starter_pct']}<span class="pct">%</span></div>
         <div class="slide-text">of convos started by you</div>
         <div class="badge {starter_class}">{starter_label}</div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_who_texts_first.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_who_texts_first.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -1145,7 +1371,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         <div class="big-number {resp_class}">{d['resp']}</div>
         <div class="slide-text">minutes</div>
         <div class="badge {resp_class}">{resp_label}</div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_response_time.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_response_time.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -1156,7 +1382,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
         <div class="slide-text">most active</div>
         <div class="big-number gradient">{hr_str}</div>
         <div class="slide-text">on <span class="yellow">{d['day']}s</span></div>
-        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_peak_hours.png', this)">📸 Save</button>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_peak_hours.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
@@ -1170,7 +1396,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="huge-name cyan">{ln[0]}</div>
             <div class="big-number yellow">{ln[1]}</div>
             <div class="slide-text">late night texts</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_3am_bestie.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_3am_bestie.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1183,7 +1409,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="big-number orange">{busiest_str}</div>
             <div class="slide-text"><span class="yellow">{busiest_count:,}</span> messages in one day</div>
             <div class="roast">what happened??</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_busiest_day.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_busiest_day.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1197,7 +1423,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-text">texts you most</div>
             <div class="huge-name orange">{f[0]}</div>
             <div class="slide-text"><span class="big-number yellow" style="font-size:56px">{ratio}x</span> more than you</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_biggest_fan.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_biggest_fan.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1211,9 +1437,77 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-text">you simp for</div>
             <div class="huge-name">{si[0]}</div>
             <div class="slide-text">you text <span class="big-number yellow" style="font-size:56px">{ratio}x</span> more</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_down_bad.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_down_bad.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
+
+    # Slide: Your Priority List (who you reply to fastest)
+    if d.get('priority_list'):
+        def format_time(mins):
+            if mins < 1:
+                return "<1 min"
+            elif mins < 60:
+                return f"{int(mins)} min"
+            else:
+                return f"{mins/60:.1f} hr"
+
+        priority_html = ''.join([f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{h}</span><span class="rank-count cyan">{format_time(t)}</span></div>' for i,(h,t,_) in enumerate(d['priority_list'][:5],1)])
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// YOUR PRIORITY LIST</div>
+            <div class="slide-text">who you reply to fastest</div>
+            <div class="rank-list">{priority_html}</div>
+            <div class="roast" style="margin-top:16px;">these people get the instant reply</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_priority_list.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Who Drops Everything (who replies to YOU fastest)
+    if d.get('fast_responders'):
+        def format_time(mins):
+            if mins < 1:
+                return "<1 min"
+            elif mins < 60:
+                return f"{int(mins)} min"
+            else:
+                return f"{mins/60:.1f} hr"
+
+        fast_html = ''.join([f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{h}</span><span class="rank-count green">{format_time(t)}</span></div>' for i,(h,t,_) in enumerate(d['fast_responders'][:5],1)])
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// WHO DROPS EVERYTHING</div>
+            <div class="slide-text">your fastest responders</div>
+            <div class="rank-list">{fast_html}</div>
+            <div class="roast" style="margin-top:16px;">they see your name and stop what they're doing</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_fast_responders.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Who Texts First (per-person initiation breakdown)
+    if d.get('initiation_breakdown'):
+        # Split into "you always reach out" vs "they always find you"
+        you_reach_out = [(h, y, t, tc) for h, y, t, tc in d['initiation_breakdown'] if tc > 0 and (y / tc) > 0.7][:3]
+        they_find_you = [(h, y, t, tc) for h, y, t, tc in d['initiation_breakdown'] if tc > 0 and (t / tc) > 0.7][:3]
+
+        if you_reach_out or they_find_you:
+            you_html = ''
+            they_html = ''
+            if you_reach_out:
+                you_html = ''.join([f'<div class="rank-item"><span class="rank-num">📤</span><span class="rank-name">{h}</span><span class="rank-count yellow">{int(y/tc*100)}%</span></div>' for h,y,t,tc in you_reach_out])
+            if they_find_you:
+                they_html = ''.join([f'<div class="rank-item"><span class="rank-num">📥</span><span class="rank-name">{h}</span><span class="rank-count cyan">{int(t/tc*100)}%</span></div>' for h,y,t,tc in they_find_you])
+
+            slides.append(f'''
+            <div class="slide">
+                <div class="slide-label">// WHO TEXTS FIRST</div>
+                <div class="slide-text">per-person initiation breakdown</div>
+                <div class="dual-cards">
+                    {f'<div class="stat-card"><div class="stat-tag">You Always Reach Out</div><div class="rank-list">{you_html}</div></div>' if you_html else ''}
+                    {f'<div class="stat-card"><div class="stat-tag">They Always Find You</div><div class="rank-list">{they_html}</div></div>' if they_html else ''}
+                </div>
+                <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_who_texts_first.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
+                <div class="slide-watermark">wrap2025.com</div>
+            </div>''')
 
     # Heating Up
     if d['heating']:
@@ -1223,7 +1517,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-label">// HEATING UP</div>
             <div class="slide-text">getting stronger in H2</div>
             <div class="rank-list">{heat_html}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_heating_up.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_heating_up.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1236,7 +1530,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-text">they chose peace</div>
             <div class="rank-list">{ghost_html}</div>
             <div class="roast" style="margin-top:16px;">before June → after</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_ghosted.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_ghosted.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1248,7 +1542,7 @@ def gen_html(d, path, year, has_imessage, has_whatsapp):
             <div class="slide-label">// EMOJIS</div>
             <div class="slide-text">your emotional range</div>
             <div class="emoji-row">{emo}</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_emojis.png', this)">📸 Save</button>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_emojis.png', this)"><svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
@@ -1596,6 +1890,15 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 }}
 .slide.active .slide-save-btn {{ opacity:1; }}
 .slide-save-btn:hover {{ background:rgba(74,222,128,0.25); border-color:var(--green); }}
+.save-icon {{ width:14px; height:14px; stroke:currentColor; flex-shrink:0; }}
+
+/* Button container for slides with toggle + save buttons */
+.slide-buttons {{
+    position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+}}
+.slide-buttons .toggle-busiest-btn {{ margin:0; }}
+.slide-buttons .slide-save-btn {{ position:static; transform:none; }}
 
 .slide.capturing, .slide.capturing * {{
     animation: none !important;
@@ -1765,7 +2068,7 @@ goTo(0);
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output', '-o', default='combined_wrapped_2025.html')
+    parser.add_argument('--output', '-o', default=None)
     parser.add_argument('--use-2024', action='store_true')
     args = parser.parse_args()
 
@@ -1808,6 +2111,9 @@ def main():
             print(f"    ⚠️  Only {total_2025} msgs in 2025, using 2024")
             year = "2024"
 
+    # Set output filename based on year
+    output_file = args.output or f'combined_wrapped_{year}.html'
+
     spinner = Spinner()
 
     # Analyze each platform
@@ -1837,10 +2143,10 @@ def main():
 
     print(f"[*] Generating report...")
     spinner.start("Building your wrapped...")
-    gen_html(merged_data, args.output, year, has_imessage, has_whatsapp)
-    spinner.stop(f"Saved to {args.output}")
+    gen_html(merged_data, output_file, year, has_imessage, has_whatsapp)
+    spinner.stop(f"Saved to {output_file}")
 
-    subprocess.run(['open', args.output])
+    subprocess.run(['open', output_file])
     print("\n  Done! Click through your wrapped.\n")
 
 if __name__ == '__main__':
