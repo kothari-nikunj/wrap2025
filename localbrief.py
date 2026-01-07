@@ -540,7 +540,8 @@ def load_all_data(progress_cb=None) -> dict:
 
             # Missed calls needing callback (incoming, unanswered, recent, contacts only)
             # First, get all outgoing calls to know who we've called back
-            called_back = {}  # phone -> latest outgoing call time
+            # Use normalized phone (last 10 digits) as key for consistent matching
+            called_back = {}  # normalized_phone -> latest outgoing call time
             if call_db:
                 for r in query_db(call_db, f"""
                     SELECT ZADDRESS as phone,
@@ -551,8 +552,11 @@ def load_all_data(progress_cb=None) -> dict:
                     phone = r['phone'] or ''
                     call_dt = parse_datetime(r['call_time'])
                     if phone and call_dt:
-                        if phone not in called_back or call_dt > called_back[phone]:
-                            called_back[phone] = call_dt
+                        # Normalize to last 10 digits for consistent matching
+                        normalized = re.sub(r'[^\d]', '', phone)[-10:]
+                        if normalized and len(normalized) >= 7:
+                            if normalized not in called_back or call_dt > called_back[normalized]:
+                                called_back[normalized] = call_dt
 
             missed_calls = []
             if call_db:
@@ -573,7 +577,9 @@ def load_all_data(progress_cb=None) -> dict:
                     if not call_dt:
                         continue
                     # Skip if we called them back after this missed call
-                    if phone in called_back and called_back[phone] > call_dt:
+                    # Normalize phone for lookup to match how called_back is keyed
+                    normalized = re.sub(r'[^\d]', '', phone)[-10:]
+                    if normalized in called_back and called_back[normalized] > call_dt:
                         continue
                     call_type = 'FaceTime' if r['call_type'] in (8, 16) else 'Phone'
                     missed_calls.append({
