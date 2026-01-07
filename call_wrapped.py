@@ -266,25 +266,28 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
     except:
         pass
 
-    # Get all WhatsApp calls in date range
-    # Note: WhatsApp call history doesn't store duration
+    # Get all WhatsApp calls from ZWACDCALLEVENT (has duration!)
+    # Join with participant table to get phone number/JID
     rows = q_whatsapp(f"""
-        SELECT a.ZFIRSTDATE, a.ZINCOMING, a.ZMISSED, a.ZVIDEO, p.ZJIDSTRING
-        FROM ZWAAGGREGATECALLEVENT a
-        JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = a.Z_PK
-        WHERE (a.ZFIRSTDATE + {MAC_EPOCH}) > {ts_start} AND (a.ZFIRSTDATE + {MAC_EPOCH}) < {ts_end}
-        ORDER BY a.ZFIRSTDATE
+        SELECT e.ZDURATION, e.ZDATE, e.ZOUTCOME, p.ZJIDSTRING
+        FROM ZWACDCALLEVENT e
+        JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = e.Z_PK
+        WHERE (e.ZDATE + {MAC_EPOCH}) > {ts_start} AND (e.ZDATE + {MAC_EPOCH}) < {ts_end}
+        ORDER BY e.ZDATE
     """)
 
     for row in rows:
-        ts, incoming, missed, is_video, jid = row
+        duration, ts, outcome, jid = row
 
-        # Get name from WhatsApp contacts or AddressBook
+        # Handle both @s.whatsapp.net (phone) and @lid (internal ID) formats
         phone = jid.split('@')[0] if jid else None
         name = None
+
+        # Try WhatsApp contacts first
         if jid in wa_contacts:
             name = wa_contacts[jid]
-        if not name:
+        # Try AddressBook lookup by phone number
+        if not name and phone:
             name = get_name(phone, contacts)
         if not name:
             continue
@@ -292,12 +295,12 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
         calls.append({
             'name': name,
             'phone': normalize_phone(phone),
-            'duration': 0,  # WhatsApp doesn't store call duration
+            'duration': duration or 0,
             'timestamp': ts + MAC_EPOCH,
-            'outgoing': incoming == 0,
-            'answered': missed == 0,
+            'outgoing': True,  # Direction not in this table
+            'answered': (duration or 0) > 0,  # Has duration = was answered
             'platform': 'WhatsApp',
-            'is_video': is_video == 1,
+            'is_video': False,  # Video flag not in this table
         })
 
     return calls
