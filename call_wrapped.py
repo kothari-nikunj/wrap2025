@@ -345,8 +345,16 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         'answered': 0, 'missed': 0, 'platforms': set(), 'names': set()
     })
     for c in all_calls:
-        # Use phone number as key for deduplication, fall back to name
-        key = c['phone'] if c['phone'] else c['name']
+        # Use last 10 digits of phone as key for consistent matching across platforms
+        phone = c['phone']
+        if phone:
+            digits = re.sub(r'\D', '', str(phone))
+            key = digits[-10:] if len(digits) >= 7 else None
+        else:
+            key = None
+        # Fall back to name if no valid phone
+        if not key:
+            key = f"name:{c['name']}"
         cs = phone_stats[key]
         cs['count'] += 1
         cs['duration'] += c['duration']
