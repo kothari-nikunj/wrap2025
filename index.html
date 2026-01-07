@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wrapped 2025 | iMessage & WhatsApp Stats Revealed</title>
+<title>Wrapped 2025 | Your Year in Messages & Calls</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌯</text></svg>">
 <link rel="canonical" href="https://wrap2025.com">
 
 <!-- Primary Meta Tags -->
-<meta name="title" content="Wrapped 2025 | iMessage & WhatsApp Stats Revealed">
-<meta name="description" content="Your 2025 texting habits, exposed. See your most texted contacts, response time, personality type, and more. Works with iMessage and WhatsApp. 100% local, runs in 30 seconds on your Mac.">
+<meta name="title" content="Wrapped 2025 | Your Year in Messages & Calls">
+<meta name="description" content="Your 2025 communication habits, exposed. See your most texted contacts, call stats, response time, personality type, and more. Works with iMessage, WhatsApp, and Phone. 100% local, runs in 30 seconds on your Mac.">
 <meta name="keywords" content="iMessage Wrapped, WhatsApp Wrapped, iMessage stats, WhatsApp stats, texting statistics, 2025 wrapped, message analytics, iMessage analysis, WhatsApp analysis, text message insights, macOS app, privacy-first">
 <meta name="author" content="Nikunj Kothari">
 <meta name="robots" content="index, follow">
@@ -829,15 +829,93 @@ kbd {
     text-decoration: none;
 }
 
-/* Platform Selector */
-.platform-selector {
-    display: inline-flex;
-    gap: 4px;
+/* Wrapped Cards Selector */
+.wrapped-cards {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
     margin-bottom: 32px;
-    background: var(--code-bg);
-    border-radius: 100px;
-    padding: 4px;
+    max-width: 800px;
+}
+
+.wrapped-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 12px;
+    background: var(--card-bg);
     border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.wrapped-card:hover {
+    border-color: var(--border-hover);
+    background: rgba(74, 222, 128, 0.03);
+}
+
+.wrapped-card.active {
+    border-color: var(--green);
+    background: rgba(74, 222, 128, 0.08);
+    box-shadow: 0 0 20px rgba(74, 222, 128, 0.15);
+}
+
+.wrapped-card[data-platform="whatsapp"].active {
+    border-color: #25D366;
+    background: rgba(37, 211, 102, 0.08);
+    box-shadow: 0 0 20px rgba(37, 211, 102, 0.15);
+}
+
+.wrapped-card[data-platform="calls"].active {
+    border-color: var(--cyan);
+    background: rgba(34, 211, 238, 0.08);
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+}
+
+.wrapped-card[data-platform="people"].active {
+    border-color: var(--purple);
+    background: rgba(167, 139, 250, 0.08);
+    box-shadow: 0 0 20px rgba(167, 139, 250, 0.15);
+}
+
+.card-icon {
+    font-size: 24px;
+}
+
+.card-title {
+    font-family: var(--font-pixel);
+    font-size: 10px;
+    color: var(--text);
+    letter-spacing: 0.5px;
+}
+
+.card-desc {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.3;
+}
+
+@media (max-width: 768px) {
+    .wrapped-cards {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .wrapped-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .wrapped-card:last-child {
+        grid-column: span 2;
+    }
+}
+
+/* Legacy Platform Selector (hidden) */
+.platform-selector {
+    display: none;
 }
 
 .platform-tab {
@@ -1048,10 +1126,10 @@ kbd {
 
 <section class="hero">
     <div class="hero-content">
-        <div class="hero-badge">Your year in texts</div>
+        <div class="hero-badge">Your year in comms</div>
 
-        <h1>YOUR MESSAGES<span class="accent">WRAPPED</span></h1>
-        <p class="subtitle">Your texting habits, exposed. See who you text most, your response time, personality type, and more. Works with iMessage and WhatsApp.</p>
+        <h1>WRAPPED<span class="accent">2025</span></h1>
+        <p class="subtitle">Your communication habits, exposed. Messages, calls, response times, personality type. Works with iMessage, WhatsApp, and Phone.</p>
 
         <div class="cta-group">
             <a href="#install" class="cta-btn download-btn">
@@ -1215,22 +1293,31 @@ kbd {
             <div class="section-line"></div>
         </div>
 
-        <div class="platform-selector" style="margin-bottom: 24px;">
-            <button class="platform-tab active" onclick="selectPlatform('imessage')">
-                <span class="icon">📱</span>
-                <span>iMessage</span>
+        <div class="wrapped-cards">
+            <button class="wrapped-card active" onclick="selectPlatform('imessage')" data-platform="imessage">
+                <span class="card-icon">💬</span>
+                <span class="card-title">iMessage</span>
+                <span class="card-desc">Your texting habits</span>
             </button>
-            <button class="platform-tab whatsapp" onclick="selectPlatform('whatsapp')">
-                <span class="icon">💬</span>
-                <span>WhatsApp</span>
+            <button class="wrapped-card" onclick="selectPlatform('whatsapp')" data-platform="whatsapp">
+                <span class="card-icon">📱</span>
+                <span class="card-title">WhatsApp</span>
+                <span class="card-desc">Your chat history</span>
             </button>
-            <button class="platform-tab combined" onclick="selectPlatform('combined')">
-                <span class="icon">📱💬</span>
-                <span>Combined</span>
+            <button class="wrapped-card" onclick="selectPlatform('calls')" data-platform="calls">
+                <span class="card-icon">📞</span>
+                <span class="card-title">Calls</span>
+                <span class="card-desc">Phone + FaceTime + WhatsApp</span>
             </button>
-            <button class="platform-tab people" onclick="selectPlatform('people')">
-                <span class="icon">🤖</span>
-                <span>People (AI)</span>
+            <button class="wrapped-card" onclick="selectPlatform('combined')" data-platform="combined">
+                <span class="card-icon">✨</span>
+                <span class="card-title">Combined</span>
+                <span class="card-desc">All messages merged</span>
+            </button>
+            <button class="wrapped-card" onclick="selectPlatform('people')" data-platform="people">
+                <span class="card-icon">🤖</span>
+                <span class="card-title">People</span>
+                <span class="card-desc">AI-powered summaries</span>
             </button>
         </div>
 
@@ -1430,6 +1517,54 @@ kbd {
             </div>
         </div>
 
+        <div id="calls-install" class="platform-content">
+            <div class="steps-list">
+                <div class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h3>Open Terminal</h3>
+                        <p>Press <kbd>⌘</kbd> + <kbd>Space</kbd>, type "Terminal", hit Enter</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h3>Grant disk access</h3>
+                        <p>System Settings → Privacy & Security → Full Disk Access → click the <kbd>+</kbd> button → navigate to Applications/Utilities/Terminal</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h3>Download the script</h3>
+                        <p>Paste in Terminal and hit Enter, or <a href="#" onclick="downloadScript(true); return false;" style="color: var(--cyan); text-decoration: underline;">download here</a>:</p>
+                        <div class="code-block">
+                            <code id="curl-cmd-calls">curl -O https://raw.githubusercontent.com/kothari-nikunj/wrap2025/main/call_wrapped.py</code>
+                            <button class="copy-btn" onclick="copyCode('curl-cmd-calls', this)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <h3>Run it</h3>
+                        <p>Paste in Terminal and hit Enter:</p>
+                        <div class="code-block">
+                            <code id="run-cmd-calls">python3 call_wrapped.py</code>
+                            <button class="copy-btn" onclick="copyCode('run-cmd-calls', this)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="combined-note" style="background: rgba(34, 211, 238, 0.08); border: 1px solid rgba(34, 211, 238, 0.2); border-radius: 12px; padding: 16px 20px; margin-top: 24px; font-size: 14px;">
+                <strong style="color: var(--cyan);">📞 Call Stats</strong><br>
+                Analyzes your Phone calls, FaceTime, and WhatsApp calls. See who you call most, talk time, missed calls, and your calling personality. Mac keeps ~1000 recent calls.
+            </div>
+        </div>
+
         <div class="warning">
             <strong>⚠️</strong>
             <span>Not enough 2025 messages? Use the <code>--use-2024</code> flag.</span>
@@ -1530,13 +1665,20 @@ let currentPlatform = 'imessage';
 function selectPlatform(platform) {
     currentPlatform = platform;
 
-    // Update all platform tabs
+    // Update wrapped cards
+    document.querySelectorAll('.wrapped-card').forEach(card => {
+        const cardPlatform = card.getAttribute('data-platform');
+        card.classList.toggle('active', cardPlatform === platform);
+    });
+
+    // Update legacy platform tabs (if any)
     document.querySelectorAll('.platform-tab').forEach(tab => {
         const tabText = tab.textContent.toLowerCase();
         let isActive = false;
         if (platform === 'imessage') isActive = tabText.includes('imessage');
         else if (platform === 'whatsapp') isActive = tabText.includes('whatsapp') && !tabText.includes('combined');
         else if (platform === 'combined') isActive = tabText.includes('combined');
+        else if (platform === 'calls') isActive = tabText.includes('calls');
         else if (platform === 'people') isActive = tabText.includes('people');
         tab.classList.toggle('active', isActive);
     });
@@ -1545,10 +1687,12 @@ function selectPlatform(platform) {
     const imessageInstall = document.getElementById('imessage-install');
     const whatsappInstall = document.getElementById('whatsapp-install');
     const combinedInstall = document.getElementById('combined-install');
+    const callsInstall = document.getElementById('calls-install');
     const peopleInstall = document.getElementById('people-install');
     if (imessageInstall) imessageInstall.classList.toggle('active', platform === 'imessage');
     if (whatsappInstall) whatsappInstall.classList.toggle('active', platform === 'whatsapp');
     if (combinedInstall) combinedInstall.classList.toggle('active', platform === 'combined');
+    if (callsInstall) callsInstall.classList.toggle('active', platform === 'calls');
     if (peopleInstall) peopleInstall.classList.toggle('active', platform === 'people');
 
     // Save preference
