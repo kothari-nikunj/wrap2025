@@ -24,9 +24,10 @@ Keyboard Shortcuts:
 
 Data Sources (all local, all private):
     - Calendar.app events
-    - Reminders.app tasks  
+    - Reminders.app tasks
     - Messages.app (iMessage)
     - WhatsApp (if installed)
+    - Phone & FaceTime calls
     - Screen Time data
     - Chrome history (if installed)
     - Downloads folder
@@ -110,11 +111,13 @@ HOME = Path.home()
 DOWNLOADS = HOME / "Downloads"
 IMESSAGE_DB = HOME / "Library/Messages/chat.db"
 WHATSAPP_DB = HOME / "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
+WHATSAPP_CALLS_DB = HOME / "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/CallHistory.sqlite"
 KNOWLEDGE_DB = HOME / "Library/Application Support/Knowledge/knowledgeC.db"
 CALENDAR_DB = HOME / "Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb"
 REMINDERS_DIR = HOME / "Library/Group Containers/group.com.apple.reminders/Container_v1/Stores"
 CONTACTS_DIR = HOME / "Library/Application Support/AddressBook/Sources"
 CHROME_HISTORY = HOME / "Library/Application Support/Google/Chrome/Default/History"
+CALL_HISTORY_DB = HOME / "Library/Application Support/CallHistoryDB/CallHistory.storedata"
 MAC_EPOCH = 978307200
 
 APP_NAMES = {
@@ -528,7 +531,116 @@ def load_all_data(progress_cb=None) -> dict:
                         yesterday_convos[name]['sent'] += 1
                     else:
                         yesterday_convos[name]['received'] += 1
-            
+
+            # ─────────────────────────────────────────────────────────────
+            # PHONE CALLS
+            # ─────────────────────────────────────────────────────────────
+            if progress_cb: progress_cb("calls")
+            call_db = snapshot_db(CALL_HISTORY_DB, tmp_dir) if CALL_HISTORY_DB.exists() else None
+
+            # Missed calls needing callback (incoming, unanswered, recent, contacts only)
+            # First, get all outgoing calls to know who we've called back
+            called_back = {}  # phone -> latest outgoing call time
+            if call_db:
+                for r in query_db(call_db, f"""
+                    SELECT ZADDRESS as phone,
+                           datetime(ZDATE + {MAC_EPOCH}, 'unixepoch', 'localtime') as call_time
+                    FROM ZCALLRECORD
+                    WHERE ZORIGINATED = 1
+                    AND date(datetime(ZDATE + {MAC_EPOCH}, 'unixepoch', 'localtime')) >= '{cutoff}'"""):
+                    phone = r['phone'] or ''
+                    call_dt = parse_datetime(r['call_time'])
+                    if phone and call_dt:
+                        if phone not in called_back or call_dt > called_back[phone]:
+                            called_back[phone] = call_dt
+
+            missed_calls = []
+            if call_db:
+                for r in query_db(call_db, f"""
+                    SELECT ZADDRESS as phone,
+                           datetime(ZDATE + {MAC_EPOCH}, 'unixepoch', 'localtime') as call_time,
+                           ZCALLTYPE as call_type
+                    FROM ZCALLRECORD
+                    WHERE ZORIGINATED = 0 AND ZANSWERED = 0
+                    AND date(datetime(ZDATE + {MAC_EPOCH}, 'unixepoch', 'localtime')) >= '{cutoff}'
+                    ORDER BY ZDATE DESC"""):
+                    phone = r['phone'] or ''
+                    # Only show calls from contacts (skip spam/unknown)
+                    display_name = resolve_contact(phone, contacts)
+                    if not display_name:
+                        continue
+                    call_dt = parse_datetime(r['call_time'])
+                    if not call_dt:
+                        continue
+                    # Skip if we called them back after this missed call
+                    if phone in called_back and called_back[phone] > call_dt:
+                        continue
+                    call_type = 'FaceTime' if r['call_type'] in (8, 16) else 'Phone'
+                    missed_calls.append({
+                        'name': display_name,
+                        'call_dt': call_dt,
+                        'call_type': call_type
+                    })
+
+            # WhatsApp missed calls
+            wa_call_db = snapshot_db(WHATSAPP_CALLS_DB, tmp_dir) if WHATSAPP_CALLS_DB.exists() else None
+
+            # Get WhatsApp outgoing calls for callback check
+            wa_called_back = {}  # jid -> latest outgoing call time
+            if wa_call_db:
+                for r in query_db(wa_call_db, f"""
+                    SELECT p.ZJIDSTRING as jid,
+                           datetime(a.ZFIRSTDATE + {MAC_EPOCH}, 'unixepoch', 'localtime') as call_time
+                    FROM ZWAAGGREGATECALLEVENT a
+                    JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = a.Z_PK
+                    WHERE a.ZINCOMING = 0
+                    AND date(datetime(a.ZFIRSTDATE + {MAC_EPOCH}, 'unixepoch', 'localtime')) >= '{cutoff}'"""):
+                    jid = r['jid'] or ''
+                    call_dt = parse_datetime(r['call_time'])
+                    if jid and call_dt:
+                        # Normalize JID - extract phone number
+                        phone = jid.split('@')[0]
+                        if phone not in wa_called_back or call_dt > wa_called_back[phone]:
+                            wa_called_back[phone] = call_dt
+
+            # Get WhatsApp missed calls
+            if wa_call_db:
+                for r in query_db(wa_call_db, f"""
+                    SELECT a.ZVIDEO as video,
+                           datetime(a.ZFIRSTDATE + {MAC_EPOCH}, 'unixepoch', 'localtime') as call_time,
+                           p.ZJIDSTRING as jid
+                    FROM ZWAAGGREGATECALLEVENT a
+                    JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = a.Z_PK
+                    WHERE a.ZINCOMING = 1 AND a.ZMISSED = 1
+                    AND date(datetime(a.ZFIRSTDATE + {MAC_EPOCH}, 'unixepoch', 'localtime')) >= '{cutoff}'
+                    ORDER BY a.ZFIRSTDATE DESC"""):
+                    jid = r['jid'] or ''
+                    phone = jid.split('@')[0]
+                    # Only show calls from contacts
+                    display_name = resolve_contact(phone, contacts)
+                    if not display_name:
+                        continue
+                    call_dt = parse_datetime(r['call_time'])
+                    if not call_dt:
+                        continue
+                    # Skip if we called them back after this missed call
+                    if phone in wa_called_back and wa_called_back[phone] > call_dt:
+                        continue
+                    call_type = 'WhatsApp Video' if r['video'] else 'WhatsApp'
+                    missed_calls.append({
+                        'name': display_name,
+                        'call_dt': call_dt,
+                        'call_type': call_type
+                    })
+
+            # Dedupe by name, keep most recent
+            seen_missed = {}
+            for mc in missed_calls:
+                name = mc['name']
+                if name not in seen_missed or mc['call_dt'] > seen_missed[name]['call_dt']:
+                    seen_missed[name] = mc
+            missed_calls = sorted(seen_missed.values(), key=lambda x: x['call_dt'], reverse=True)
+
             # ─────────────────────────────────────────────────────────────
             # CHROME HISTORY
             # ─────────────────────────────────────────────────────────────
@@ -575,6 +687,7 @@ def load_all_data(progress_cb=None) -> dict:
                 'week_cal': week_cal,
                 'reminders': reminders,
                 'needs_response': needs_response[:5],
+                'missed_calls': missed_calls[:5],
                 'screen_time': screen_time[:5],
                 'screen_time_total': sum(m for _, m in screen_time),
                 'focus': focus,
@@ -886,7 +999,32 @@ class LocalBrief:
                     self.w(f"{age}\n", "accent")
                 else:
                     self.w(f"{age}\n", "dim")
-        
+
+        # ════════════════════════════════════════════════════════════════
+        # MISSED CALLS
+        # ════════════════════════════════════════════════════════════════
+        missed_calls = self.data.get('missed_calls', [])
+        if missed_calls:
+            self.ln()
+            self.w("MISSED CALLS\n", "section")
+            self.ln()
+            for mc in missed_calls:
+                age = format_relative(mc['call_dt'])
+                warn = (datetime.now() - mc['call_dt']).days >= 2
+                name = mc['name'][:24].ljust(24)
+                call_type = mc['call_type']
+                if 'WhatsApp' in call_type:
+                    icon = "📱"
+                elif call_type == 'FaceTime':
+                    icon = "📹"
+                else:
+                    icon = "📞"
+                self.w(f"{icon} {name}  ")
+                if warn:
+                    self.w(f"{age}\n", "accent")
+                else:
+                    self.w(f"{age}\n", "dim")
+
         # ════════════════════════════════════════════════════════════════
         # UNREAD FILES
         # ════════════════════════════════════════════════════════════════
@@ -963,7 +1101,7 @@ class LocalBrief:
             if focus.get('deep_blocks', 0) > 0:
                 self.w("Deep work (20m+)  ", "dim")
                 self.w(f"{focus['deep_blocks']} blocks\n")
-        
+
         # ════════════════════════════════════════════════════════════════
         # CONVERSATIONS
         # ════════════════════════════════════════════════════════════════
@@ -982,8 +1120,8 @@ class LocalBrief:
                 self.ln()
                 for name, d in sorted_convos:
                     total = d['sent'] + d['received']
-                    n = name[:14].ljust(14)
-                    b = self.bar(total, max_msgs)
+                    n = name[:18].ljust(18)
+                    b = self.bar(total, max_msgs, width=10)
                     self.w(f"{n}", "dim")
                     self.w(f"{b}", "bar")
                     self.w(f"{total:4}\n", "dim")
