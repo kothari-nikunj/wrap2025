@@ -525,6 +525,123 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     # Unique contacts
     d['unique_contacts'] = len(contact_stats)
 
+    # === NEW DELIGHTFUL INSIGHTS ===
+
+    # First call of the year
+    if all_calls:
+        first_call = all_calls[0]
+        d['first_call'] = first_call
+    else:
+        d['first_call'] = None
+
+    # Who calls YOU most (biggest fan - inbound only)
+    inbound_from = defaultdict(int)
+    for c in all_calls:
+        if not c['outgoing']:
+            inbound_from[c['name']] += 1
+    biggest_fans = sorted(inbound_from.items(), key=lambda x: x[1], reverse=True)[:5]
+    d['biggest_fans'] = biggest_fans
+
+    # Longest streak (consecutive days calling same person)
+    streaks = {}
+    for name in contact_stats.keys():
+        person_dates = sorted(set(
+            datetime.fromtimestamp(c['timestamp']).strftime('%Y-%m-%d')
+            for c in all_calls if c['name'] == name
+        ))
+        if len(person_dates) < 2:
+            continue
+        max_streak = 1
+        current_streak = 1
+        for i in range(1, len(person_dates)):
+            d1 = datetime.strptime(person_dates[i-1], '%Y-%m-%d')
+            d2 = datetime.strptime(person_dates[i], '%Y-%m-%d')
+            if (d2 - d1).days == 1:
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 1
+        if max_streak >= 3:
+            streaks[name] = max_streak
+    if streaks:
+        best_streak = max(streaks.items(), key=lambda x: x[1])
+        d['longest_streak'] = best_streak
+    else:
+        d['longest_streak'] = None
+
+    # Weekday vs Weekend breakdown
+    weekday_calls = sum(1 for c in all_calls if datetime.fromtimestamp(c['timestamp']).weekday() < 5)
+    weekend_calls = total_calls - weekday_calls
+    d['weekday_weekend'] = {'weekday': weekday_calls, 'weekend': weekend_calls}
+
+    # Call duration buckets (quick <2min, normal 2-15min, marathon 15min+)
+    quick_calls = sum(1 for c in all_calls if c['answered'] and c['duration'] < 120)
+    normal_calls = sum(1 for c in all_calls if c['answered'] and 120 <= c['duration'] < 900)
+    long_calls = sum(1 for c in all_calls if c['answered'] and c['duration'] >= 900)
+    d['duration_buckets'] = {'quick': quick_calls, 'normal': normal_calls, 'marathon': long_calls}
+
+    # Ghost protocol (missed calls you never returned)
+    # Build set of people you called (outgoing)
+    people_you_called = set()
+    call_times_to = defaultdict(list)  # name -> list of outgoing call timestamps
+    for c in all_calls:
+        if c['outgoing']:
+            people_you_called.add(c['name'])
+            call_times_to[c['name']].append(c['timestamp'])
+
+    # Find missed calls you never returned (or returned very late)
+    ghosts = defaultdict(int)
+    for c in all_calls:
+        if not c['outgoing'] and not c['answered']:
+            # Check if you ever called them back after this
+            later_calls = [t for t in call_times_to.get(c['name'], []) if t > c['timestamp']]
+            if not later_calls:
+                ghosts[c['name']] += 1
+    ghost_list = sorted(ghosts.items(), key=lambda x: x[1], reverse=True)[:5]
+    d['ghosts'] = ghost_list
+
+    # Call back speed (avg time to return missed calls, in minutes)
+    callback_times = []
+    for c in all_calls:
+        if not c['outgoing'] and not c['answered']:
+            # Find first outgoing call to this person after the missed call
+            later_calls = [t for t in call_times_to.get(c['name'], []) if t > c['timestamp']]
+            if later_calls:
+                callback_time = (min(later_calls) - c['timestamp']) / 60  # minutes
+                if callback_time < 1440:  # within 24 hours
+                    callback_times.append(callback_time)
+    if callback_times:
+        d['avg_callback_time'] = round(sum(callback_times) / len(callback_times))
+    else:
+        d['avg_callback_time'] = None
+
+    # Calling personality diagnosis
+    # Based on: call frequency, duration, missed rate, callback speed, outgoing ratio
+    answered_calls = [c for c in all_calls if c['answered']]
+    avg_duration = sum(c['duration'] for c in answered_calls) / max(len(answered_calls), 1)
+    outgoing_ratio = outgoing / max(total_calls, 1)
+    miss_rate = missed / max(total_calls, 1)
+
+    if avg_duration < 60 and total_calls > 200:
+        personality = ("THE SPEED DIALER", "You treat calls like texts - quick, efficient, gone")
+    elif avg_duration > 600 and total_calls > 50:
+        personality = ("THE CHATTY CATHY", "Once you're on the phone, you're ON the phone")
+    elif miss_rate > 0.4:
+        personality = ("THE SCREENER", "Your phone is always on silent, isn't it?")
+    elif outgoing_ratio > 0.7:
+        personality = ("THE INITIATOR", "You don't wait for calls, you make them happen")
+    elif outgoing_ratio < 0.3:
+        personality = ("THE POPULAR ONE", "Everyone wants to talk to you")
+    elif d['avg_callback_time'] and d['avg_callback_time'] < 10:
+        personality = ("THE RESPONSIVE ONE", "Missed call? You'll call back in minutes")
+    elif total_calls < 50:
+        personality = ("THE PHONE PHOBIC", "Calls? In this economy? You prefer texts")
+    elif weekend_calls > weekday_calls * 0.5:
+        personality = ("THE WEEKEND WARRIOR", "Your phone comes alive on weekends")
+    else:
+        personality = ("THE BALANCED CALLER", "A healthy relationship with your phone")
+    d['personality'] = personality
+
     return d
 
 
@@ -938,6 +1055,159 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
+    # Slide: First Call of the Year
+    if d['first_call']:
+        fc = d['first_call']
+        fc_date = datetime.fromtimestamp(fc['timestamp']).strftime('%b %d at %I:%M%p')
+        fc_direction = "to" if fc['outgoing'] else "from"
+        slides.append(f'''
+        <div class="slide purple-bg">
+            <div class="slide-label">// FIRST CALL OF {year}</div>
+            <div class="slide-icon">🎉</div>
+            <div class="slide-text">your year started with a call {fc_direction}</div>
+            <div class="huge-name cyan">{fc['name']}</div>
+            <div class="roast">{fc_date}</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_first_call.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Biggest Fan (who calls YOU most)
+    if d['biggest_fans']:
+        fan = d['biggest_fans'][0]
+        slides.append(f'''
+        <div class="slide gradient-bg">
+            <div class="slide-label">// BIGGEST FAN</div>
+            <div class="slide-text">who calls YOU the most</div>
+            <div class="huge-name">{fan[0]}</div>
+            <div class="big-number yellow">{fan[1]}</div>
+            <div class="slide-text">incoming calls from them</div>
+            <div class="roast">someone really wants to hear your voice</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_biggest_fan.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Longest Streak
+    if d['longest_streak']:
+        streak_name, streak_days = d['longest_streak']
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// LONGEST STREAK</div>
+            <div class="slide-icon">🔥</div>
+            <div class="huge-name cyan">{streak_name}</div>
+            <div class="big-number yellow">{streak_days}</div>
+            <div class="slide-text">consecutive days calling</div>
+            <div class="roast">commitment level: high</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_longest_streak.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Weekday vs Weekend
+    ww = d['weekday_weekend']
+    weekday_pct = round(ww['weekday'] / max(stats['total'], 1) * 100)
+    weekend_pct = 100 - weekday_pct
+    slides.append(f'''
+    <div class="slide">
+        <div class="slide-label">// WORK-LIFE BALANCE</div>
+        <div class="dual-stats">
+            <div class="dual-stat">
+                <span class="dual-icon">💼</span>
+                <span class="dual-num cyan">{weekday_pct}%</span>
+                <span class="dual-label">weekday calls</span>
+            </div>
+            <div class="dual-stat">
+                <span class="dual-icon">🎉</span>
+                <span class="dual-num yellow">{weekend_pct}%</span>
+                <span class="dual-label">weekend calls</span>
+            </div>
+        </div>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_weekday_weekend.png', this)">📸 Save</button>
+        <div class="slide-watermark">wrap2025.com</div>
+    </div>''')
+
+    # Slide: Call Duration Buckets
+    buckets = d['duration_buckets']
+    total_answered = buckets['quick'] + buckets['normal'] + buckets['marathon']
+    if total_answered > 0:
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// CALL STYLE</div>
+            <div class="slide-text">how long are your calls?</div>
+            <div class="duration-buckets">
+                <div class="bucket">
+                    <span class="bucket-icon">⚡</span>
+                    <span class="bucket-num cyan">{buckets['quick']}</span>
+                    <span class="bucket-label">quick<br>&lt;2 min</span>
+                </div>
+                <div class="bucket">
+                    <span class="bucket-icon">💬</span>
+                    <span class="bucket-num yellow">{buckets['normal']}</span>
+                    <span class="bucket-label">normal<br>2-15 min</span>
+                </div>
+                <div class="bucket">
+                    <span class="bucket-icon">🗣️</span>
+                    <span class="bucket-num orange">{buckets['marathon']}</span>
+                    <span class="bucket-label">marathon<br>15+ min</span>
+                </div>
+            </div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_call_style.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Ghost Protocol (unreturned missed calls)
+    if d['ghosts']:
+        ghost_html = ''.join([
+            f'<div class="rank-item"><span class="rank-num">👻</span><span class="rank-name">{name}</span><span class="rank-count red">{count}</span></div>'
+            for name, count in d['ghosts'][:5]
+        ])
+        slides.append(f'''
+        <div class="slide red-bg">
+            <div class="slide-label">// GHOST PROTOCOL</div>
+            <div class="slide-text">missed calls you never returned</div>
+            <div class="rank-list">{ghost_html}</div>
+            <div class="roast" style="margin-top:16px;">they're still waiting...</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_ghost_protocol.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Callback Speed
+    if d['avg_callback_time']:
+        cb_time = d['avg_callback_time']
+        if cb_time < 5:
+            cb_label = "LIGHTNING"
+            cb_class = "green"
+        elif cb_time < 30:
+            cb_label = "RESPONSIVE"
+            cb_class = "cyan"
+        elif cb_time < 120:
+            cb_label = "EVENTUALLY"
+            cb_class = "yellow"
+        else:
+            cb_label = "WHENEVER"
+            cb_class = "red"
+
+        cb_display = f"{cb_time}m" if cb_time < 60 else f"{cb_time // 60}h {cb_time % 60}m"
+        slides.append(f'''
+        <div class="slide">
+            <div class="slide-label">// CALLBACK SPEED</div>
+            <div class="slide-text">avg time to return missed calls</div>
+            <div class="big-number {cb_class}">{cb_display}</div>
+            <div class="badge {cb_class}">{cb_label}</div>
+            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_callback_speed.png', this)">📸 Save</button>
+            <div class="slide-watermark">wrap2025.com</div>
+        </div>''')
+
+    # Slide: Calling Personality
+    ptype, proast = d['personality']
+    slides.append(f'''
+    <div class="slide purple-bg">
+        <div class="slide-label">// DIAGNOSIS</div>
+        <div class="slide-text">your calling personality</div>
+        <div class="personality-type">{ptype}</div>
+        <div class="roast">"{proast}"</div>
+        <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_personality.png', this)">📸 Save</button>
+        <div class="slide-watermark">wrap2025.com</div>
+    </div>''')
+
     # Slide 17: Heating Up
     if d['heating_up']:
         heat_html = ''.join([
@@ -1013,6 +1283,9 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
                     <span class="summary-stat-val">{stats['missed']}</span>
                     <span class="summary-stat-lbl">missed</span>
                 </div>
+            </div>
+            <div class="summary-personality">
+                <span class="summary-personality-type">{d['personality'][0]}</span>
             </div>
             <div class="summary-top3">
                 <span class="summary-top3-label">TOP 3:</span>
@@ -1148,6 +1421,16 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .dual-num {{ font-family:var(--font-mono); font-size:48px; font-weight:600; }}
 .dual-label {{ font-size:14px; color:var(--muted); margin-top:8px; }}
 
+/* Duration buckets */
+.duration-buckets {{ display:flex; gap:32px; margin:32px 0; justify-content:center; }}
+.bucket {{ display:flex; flex-direction:column; align-items:center; padding:20px; background:rgba(255,255,255,0.05); border-radius:16px; min-width:100px; }}
+.bucket-icon {{ font-size:32px; margin-bottom:8px; }}
+.bucket-num {{ font-family:var(--font-mono); font-size:36px; font-weight:600; }}
+.bucket-label {{ font-size:12px; color:var(--muted); margin-top:8px; text-align:center; line-height:1.3; }}
+
+/* Personality type */
+.personality-type {{ font-family:var(--font-pixel); font-size:18px; font-weight:400; line-height:1.25; color:var(--purple); margin:24px 0; text-transform:uppercase; letter-spacing:0.5px; }}
+
 .slide h1 {{ font-family:var(--font-pixel); font-size:36px; font-weight:400; line-height:1.2; margin:20px 0; }}
 .slide-label {{ font-family:var(--font-pixel); font-size:12px; font-weight:400; color:var(--cyan); letter-spacing:0.5px; margin-bottom:16px; }}
 .slide-icon {{ font-size:80px; margin-bottom:16px; }}
@@ -1205,7 +1488,9 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .slide .contrib-graph,
 .slide .contrib-stats,
 .slide .platform-bars,
-.slide .dual-stats {{
+.slide .dual-stats,
+.slide .duration-buckets,
+.slide .personality-type {{
     opacity: 0;
     transform: translateY(20px);
 }}
@@ -1244,6 +1529,10 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .slide.active .contrib-stat:nth-child(3) {{ animation-delay: 0.7s; }}
 .slide.active .platform-bars {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
 .slide.active .dual-stats {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
+.slide.active .duration-buckets {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
+.slide.active .personality-type {{ animation: glitchReveal 0.8s ease-out 0.15s forwards; }}
+
+@keyframes glitchReveal {{ 0% {{ opacity: 0; transform: translateY(15px); filter: blur(4px); }} 50% {{ opacity: 0.8; transform: translateY(3px) skewX(-3deg); filter: blur(1px); }} 100% {{ opacity: 1; transform: translateY(0) skewX(0); filter: blur(0); }} }}
 
 @keyframes textFade {{ 0% {{ opacity: 0; transform: translateY(15px); }} 100% {{ opacity: 1; transform: translateY(0); }} }}
 @keyframes titleReveal {{ 0% {{ opacity: 0; transform: translateY(25px) scale(0.95); }} 70% {{ transform: translateY(-3px) scale(1.01); }} 100% {{ opacity: 1; transform: translateY(0) scale(1); }} }}
@@ -1279,6 +1568,8 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .summary-stat {{ display:flex; flex-direction:column; align-items:center; }}
 .summary-stat-val {{ font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--cyan); }}
 .summary-stat-lbl {{ font-size:9px; color:var(--muted); text-transform:uppercase; margin-top:4px; letter-spacing:0.3px; }}
+.summary-personality {{ margin:16px 0; }}
+.summary-personality-type {{ font-family:var(--font-pixel); font-size:11px; font-weight:400; color:var(--purple); text-transform:uppercase; letter-spacing:0.3px; }}
 .summary-top3 {{ margin:16px 0; display:flex; flex-direction:column; gap:6px; }}
 .summary-top3-label {{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }}
 .summary-top3-names {{ font-size:13px; color:var(--text); }}
