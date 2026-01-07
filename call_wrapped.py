@@ -317,7 +317,8 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     all_calls = phone_calls + whatsapp_calls
     all_calls.sort(key=lambda x: x['timestamp'])
 
-    # === FIRST: Build name normalization map (phone -> best name) ===
+    # === FIRST: Build name normalization map ===
+    # Step 1: Phone-based matching (same phone = same person)
     phone_to_names = defaultdict(set)
     for c in all_calls:
         phone = c['phone']
@@ -327,12 +328,33 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
             if key:
                 phone_to_names[key].add(c['name'])
 
-    # Create mapping: any name variation -> best (longest) name
     name_normalize = {}
     for key, names in phone_to_names.items():
         best_name = max(names, key=len)
         for name in names:
             name_normalize[name] = best_name
+
+    # Step 2: Name-based fuzzy matching for contacts without phone numbers
+    # If "Shimolee" appears and "Shimolee Kothari" exists, merge them
+    all_names = set(c['name'] for c in all_calls)
+    normalized_names = set(name_normalize.values())
+    all_target_names = all_names | normalized_names
+
+    for name in all_names:
+        if name in name_normalize:
+            continue  # Already normalized via phone
+        # Look for a longer name that starts with this name (first name match)
+        name_lower = name.lower()
+        for target in all_target_names:
+            target_lower = target.lower()
+            # Match if target starts with name followed by space (e.g., "Shimolee" -> "Shimolee Kothari")
+            if target_lower.startswith(name_lower + ' ') and len(target) > len(name):
+                name_normalize[name] = target
+                break
+            # Also match first name from full name (e.g., if only first name in one source)
+            if name_lower == target_lower.split()[0] and len(target) > len(name):
+                name_normalize[name] = target
+                break
 
     # Normalize all call names for consistent analytics
     for c in all_calls:
@@ -989,6 +1011,11 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
         contrib_html += '<div class="contrib-legend"><span>Less</span><div class="contrib-cell level-0"></div><div class="contrib-cell level-1"></div><div class="contrib-cell level-2"></div><div class="contrib-cell level-3"></div><div class="contrib-cell level-4"></div><span>More</span></div>'
         contrib_html += '</div>'
 
+        # Add note about data coverage on activity slide
+        activity_note = ""
+        if coverage_warning:
+            activity_note = f'<div class="activity-note">⚠️ {coverage_warning} (Mac keeps ~1000 calls)</div>'
+
         slides.append(f'''
         <div class="slide contrib-slide">
             <div class="slide-label">// CALL ACTIVITY</div>
@@ -999,6 +1026,7 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
                 <div class="contrib-stat"><span class="contrib-stat-num">{d['busiest_month']}</span><span class="contrib-stat-lbl">busiest month</span></div>
                 <div class="contrib-stat"><span class="contrib-stat-num">{d['quiet_days']}</span><span class="contrib-stat-lbl">quiet days</span></div>
             </div>
+            {activity_note}
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_call_activity.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
@@ -1400,6 +1428,7 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .contrib-stat {{ display:flex; flex-direction:column; align-items:center; }}
 .contrib-stat-num {{ font-family:var(--font-mono); font-size:28px; font-weight:600; color:var(--cyan); }}
 .contrib-stat-lbl {{ font-size:11px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:0.5px; }}
+.activity-note {{ font-size:11px; color:var(--yellow); margin-top:16px; opacity:0.85; }}
 
 /* Platform breakdown */
 .platform-bars {{ display:flex; flex-direction:column; gap:16px; width:100%; max-width:500px; margin:32px 0; }}
@@ -1567,7 +1596,7 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .summary-platform-split {{ display:flex; justify-content:center; gap:16px; margin:16px 0; padding:12px 0; border-top:1px solid rgba(255,255,255,0.05); border-bottom:1px solid rgba(255,255,255,0.05); font-family:var(--font-mono); font-size:14px; color:var(--cyan); }}
 .summary-stats {{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:24px 0; padding:20px 0; border-top:1px solid rgba(255,255,255,0.1); border-bottom:1px solid rgba(255,255,255,0.1); }}
 .summary-stat {{ display:flex; flex-direction:column; align-items:center; }}
-.summary-stat-val {{ font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--cyan); }}
+.summary-stat-val {{ font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--cyan); white-space:nowrap; }}
 .summary-stat-lbl {{ font-size:9px; color:var(--muted); text-transform:uppercase; margin-top:4px; letter-spacing:0.3px; }}
 .summary-personality {{ margin:16px 0; }}
 .summary-personality-type {{ font-family:var(--font-pixel); font-size:11px; font-weight:400; color:var(--purple); text-transform:uppercase; letter-spacing:0.3px; }}
