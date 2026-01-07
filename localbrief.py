@@ -592,7 +592,7 @@ def load_all_data(progress_cb=None) -> dict:
             wa_call_db = snapshot_db(WHATSAPP_CALLS_DB, tmp_dir) if WHATSAPP_CALLS_DB.exists() else None
 
             # Get WhatsApp outgoing calls for callback check
-            wa_called_back = {}  # jid -> latest outgoing call time
+            # Add to the same called_back dict (normalized) so cross-platform callbacks work
             if wa_call_db:
                 for r in query_db(wa_call_db, f"""
                     SELECT p.ZJIDSTRING as jid,
@@ -604,10 +604,12 @@ def load_all_data(progress_cb=None) -> dict:
                     jid = r['jid'] or ''
                     call_dt = parse_datetime(r['call_time'])
                     if jid and call_dt:
-                        # Normalize JID - extract phone number
+                        # Normalize to last 10 digits for consistent matching
                         phone = jid.split('@')[0]
-                        if phone not in wa_called_back or call_dt > wa_called_back[phone]:
-                            wa_called_back[phone] = call_dt
+                        normalized = re.sub(r'[^\d]', '', phone)[-10:]
+                        if normalized and len(normalized) >= 7:
+                            if normalized not in called_back or call_dt > called_back[normalized]:
+                                called_back[normalized] = call_dt
 
             # Get WhatsApp missed calls
             if wa_call_db:
@@ -629,8 +631,10 @@ def load_all_data(progress_cb=None) -> dict:
                     call_dt = parse_datetime(r['call_time'])
                     if not call_dt:
                         continue
-                    # Skip if we called them back after this missed call
-                    if phone in wa_called_back and wa_called_back[phone] > call_dt:
+                    # Skip if we called them back after this missed call (any platform)
+                    # Normalize phone for lookup to match how called_back is keyed
+                    normalized = re.sub(r'[^\d]', '', phone)[-10:]
+                    if normalized in called_back and called_back[normalized] > call_dt:
                         continue
                     call_type = 'WhatsApp Video' if r['video'] else 'WhatsApp'
                     missed_calls.append({
