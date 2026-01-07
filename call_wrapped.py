@@ -267,8 +267,9 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
         pass
 
     # Get all WhatsApp calls in date range
+    # Note: WhatsApp call history doesn't store duration
     rows = q_whatsapp(f"""
-        SELECT a.ZDURATION, a.ZFIRSTDATE, a.ZINCOMING, a.ZMISSED, a.ZVIDEO, p.ZJIDSTRING
+        SELECT a.ZFIRSTDATE, a.ZINCOMING, a.ZMISSED, a.ZVIDEO, p.ZJIDSTRING
         FROM ZWAAGGREGATECALLEVENT a
         JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = a.Z_PK
         WHERE (a.ZFIRSTDATE + {MAC_EPOCH}) > {ts_start} AND (a.ZFIRSTDATE + {MAC_EPOCH}) < {ts_end}
@@ -276,7 +277,7 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
     """)
 
     for row in rows:
-        duration, ts, incoming, missed, is_video, jid = row
+        ts, incoming, missed, is_video, jid = row
 
         # Get name from WhatsApp contacts or AddressBook
         phone = jid.split('@')[0] if jid else None
@@ -291,7 +292,7 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
         calls.append({
             'name': name,
             'phone': normalize_phone(phone),
-            'duration': duration or 0,
+            'duration': 0,  # WhatsApp doesn't store call duration
             'timestamp': ts + MAC_EPOCH,
             'outgoing': incoming == 0,
             'answered': missed == 0,
