@@ -447,9 +447,28 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         best_name = max(stats['names'], key=len)
         platforms = list(stats['platforms'])
 
+        # Check if this name should merge with an existing entry
+        # First check exact match
+        merge_target = None
         if best_name in contact_stats:
+            merge_target = best_name
+        else:
+            # Check if any existing name starts with best_name + space OR best_name starts with existing + space
+            for existing_name in contact_stats.keys():
+                existing_lower = existing_name.lower()
+                best_lower = best_name.lower()
+                if existing_lower.startswith(best_lower + ' '):
+                    # Existing is longer (e.g., "Shimolee Kothari"), merge into it
+                    merge_target = existing_name
+                    break
+                elif best_lower.startswith(existing_lower + ' '):
+                    # best_name is longer, we'll rename the existing entry
+                    merge_target = existing_name
+                    break
+
+        if merge_target:
             # Merge with existing entry
-            existing = contact_stats[best_name]
+            existing = contact_stats[merge_target]
             existing['count'] += stats['count']
             existing['duration'] += stats['duration']
             existing['outgoing'] += stats['outgoing']
@@ -457,6 +476,10 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
             existing['answered'] += stats['answered']
             existing['missed'] += stats['missed']
             existing['platforms'] = list(set(existing['platforms']) | set(platforms))
+
+            # If best_name is longer, rename the entry
+            if len(best_name) > len(merge_target):
+                contact_stats[best_name] = contact_stats.pop(merge_target)
         else:
             # New entry
             contact_stats[best_name] = {
@@ -939,8 +962,18 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
 
     # Slide 6: Inner Circle (Top 5 by calls)
     if d['top_count']:
+        def platform_icons(platforms):
+            icons = []
+            if 'Phone' in platforms:
+                icons.append('<span style="color:#4ade80;font-size:10px">📱</span>')
+            if 'FaceTime' in platforms:
+                icons.append('<span style="color:#22d3ee;font-size:10px">📹</span>')
+            if 'WhatsApp' in platforms:
+                icons.append('<span style="color:#25d366;font-size:10px">💬</span>')
+            return ''.join(icons) if icons else ''
+
         top5_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{name}</span><span class="rank-count">{stats["count"]:,}</span></div>'
+            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{name} <span class="platform-icons">{platform_icons(stats.get("platforms", []))}</span></span><span class="rank-count">{stats["count"]:,}</span></div>'
             for i, (name, stats) in enumerate(d['top_count'][:5], 1)
         ])
         slides.append(f'''
@@ -955,7 +988,7 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
     # Slide 7: Talk Time Champions (Top 5 by duration)
     if d['top_duration']:
         duration_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{name}</span><span class="rank-count cyan">{format_duration_short(stats["duration"])}</span></div>'
+            f'<div class="rank-item"><span class="rank-num">{i}</span><span class="rank-name">{name} <span class="platform-icons">{platform_icons(stats.get("platforms", []))}</span></span><span class="rank-count cyan">{format_duration_short(stats["duration"])}</span></div>'
             for i, (name, stats) in enumerate(d['top_duration'][:5], 1)
         ])
         slides.append(f'''
@@ -1320,19 +1353,23 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
     # Final slide: Summary
     top3_names = ', '.join([name for name, _ in d['top_count'][:3]]) if d['top_count'] else "No contacts"
 
-    # Platform breakdown for summary - use colored indicators
+    # Platform breakdown for summary - use colored labels
     platform_summary = []
     for platform in ['Phone', 'FaceTime', 'WhatsApp']:
         if platform in d['platforms']:
-            # Use colored dots/icons for cleaner look
+            # Use colored labels for clarity
             if platform == 'Phone':
-                icon = '<span style="color:#4ade80">●</span>'
+                color = '#4ade80'
+                label = 'Phone'
             elif platform == 'FaceTime':
-                icon = '<span style="color:#22d3ee">●</span>'
+                color = '#22d3ee'
+                label = 'FaceTime'
             else:  # WhatsApp
-                icon = '<span style="color:#25d366">●</span>'
-            platform_summary.append(f'{icon} {d["platforms"][platform]["count"]:,}')
-    platform_summary_html = ' &nbsp; '.join(platform_summary)
+                color = '#25d366'
+                label = 'WhatsApp'
+            count = d["platforms"][platform]["count"]
+            platform_summary.append(f'<span style="color:{color}">{label}</span> {count:,}')
+    platform_summary_html = ' <span style="color:#666;margin:0 8px">·</span> '.join(platform_summary)
 
     slides.append(f'''
     <div class="slide summary-slide">
