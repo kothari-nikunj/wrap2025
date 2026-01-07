@@ -1696,7 +1696,7 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .summary-big-stat {{ display:flex; flex-direction:column; align-items:center; }}
 .summary-big-num {{ font-family:var(--font-mono); font-size:52px; font-weight:600; background:linear-gradient(135deg, var(--cyan), var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; letter-spacing:-2px; }}
 .summary-big-label {{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-top:6px; }}
-.summary-platform-split {{ display:flex; justify-content:center; gap:20px; margin:14px 0; padding:10px 0; border-top:1px solid rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.04); font-family:var(--font-mono); font-size:13px; }}
+.summary-platform-split {{ display:flex; justify-content:center; flex-wrap:wrap; gap:6px 12px; margin:14px 0; padding:10px 16px; border-top:1px solid rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.04); font-family:var(--font-mono); font-size:11px; }}
 .summary-stats {{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:18px 0; padding:16px 0; border-top:1px solid rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.06); }}
 .summary-stat {{ display:flex; flex-direction:column; align-items:center; }}
 .summary-stat-val {{ font-family:var(--font-mono); font-size:18px; font-weight:600; color:var(--cyan); white-space:nowrap; }}
