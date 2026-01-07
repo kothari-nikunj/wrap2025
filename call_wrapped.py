@@ -317,12 +317,35 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     all_calls = phone_calls + whatsapp_calls
     all_calls.sort(key=lambda x: x['timestamp'])
 
+    # === FIRST: Build name normalization map (phone -> best name) ===
+    phone_to_names = defaultdict(set)
+    for c in all_calls:
+        phone = c['phone']
+        if phone:
+            digits = re.sub(r'\D', '', str(phone))
+            key = digits[-10:] if len(digits) >= 7 else None
+            if key:
+                phone_to_names[key].add(c['name'])
+
+    # Create mapping: any name variation -> best (longest) name
+    name_normalize = {}
+    for key, names in phone_to_names.items():
+        best_name = max(names, key=len)
+        for name in names:
+            name_normalize[name] = best_name
+
+    # Normalize all call names for consistent analytics
+    for c in all_calls:
+        c['name'] = name_normalize.get(c['name'], c['name'])
+
     d = {}
 
-    # Basic stats
+    # Basic stats (note: WhatsApp direction unknown, so outgoing/incoming skewed)
     total_calls = len(all_calls)
-    outgoing = sum(1 for c in all_calls if c['outgoing'])
-    incoming = total_calls - outgoing
+    # Only count direction for Phone/FaceTime where we have accurate data
+    phone_ft_calls = [c for c in all_calls if c['platform'] != 'WhatsApp']
+    outgoing = sum(1 for c in phone_ft_calls if c['outgoing'])
+    incoming = sum(1 for c in phone_ft_calls if not c['outgoing'])
     answered = sum(1 for c in all_calls if c['answered'])
     missed = total_calls - answered
     total_duration = sum(c['duration'] for c in all_calls)
@@ -343,7 +366,7 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         platform_stats[c['platform']]['duration'] += c['duration']
     d['platforms'] = dict(platform_stats)
 
-    # Video vs voice
+    # Video vs voice (only accurate for Phone/FaceTime)
     video_calls = sum(1 for c in all_calls if c['is_video'])
     voice_calls = total_calls - video_calls
     d['video_voice'] = {'video': video_calls, 'voice': voice_calls}
@@ -367,8 +390,10 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         cs = phone_stats[key]
         cs['count'] += 1
         cs['duration'] += c['duration']
-        cs['outgoing'] += 1 if c['outgoing'] else 0
-        cs['incoming'] += 0 if c['outgoing'] else 1
+        # Only count direction for Phone/FaceTime
+        if c['platform'] != 'WhatsApp':
+            cs['outgoing'] += 1 if c['outgoing'] else 0
+            cs['incoming'] += 0 if c['outgoing'] else 1
         cs['answered'] += 1 if c['answered'] else 0
         cs['missed'] += 0 if c['answered'] else 1
         cs['platforms'].add(c['platform'])
@@ -439,25 +464,25 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     early_birds = sorted(early_bird_stats.items(), key=lambda x: x[1], reverse=True)[:5]
     d['early_birds'] = early_birds
 
-    # Missed call king (who you miss calls from most)
+    # Missed call king (who you miss calls from most) - Phone/FaceTime only (has direction)
     missed_from = defaultdict(int)
     for c in all_calls:
-        if not c['answered'] and not c['outgoing']:
+        if c['platform'] != 'WhatsApp' and not c['answered'] and not c['outgoing']:
             missed_from[c['name']] += 1
     missed_kings = sorted(missed_from.items(), key=lambda x: x[1], reverse=True)[:5]
     d['missed_kings'] = missed_kings
 
-    # Call avoider (who you call but doesn't answer)
+    # Call avoider (who you call but doesn't answer) - Phone/FaceTime only
     unanswered_to = defaultdict(lambda: {'attempts': 0, 'answered': 0})
     for c in all_calls:
-        if c['outgoing']:
+        if c['platform'] != 'WhatsApp' and c['outgoing']:
             unanswered_to[c['name']]['attempts'] += 1
             if c['answered']:
                 unanswered_to[c['name']]['answered'] += 1
 
     avoiders = []
     for name, stats in unanswered_to.items():
-        if stats['attempts'] >= 5:
+        if stats['attempts'] >= 3:  # Lower threshold since Phone/FaceTime only
             miss_rate = (stats['attempts'] - stats['answered']) / stats['attempts']
             if miss_rate > 0.5:
                 avoiders.append((name, stats['attempts'] - stats['answered'], stats['attempts']))
@@ -560,10 +585,10 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     else:
         d['first_call'] = None
 
-    # Who calls YOU most (biggest fan - inbound only)
+    # Who calls YOU most (biggest fan - inbound only, Phone/FaceTime only since WhatsApp has no direction)
     inbound_from = defaultdict(int)
     for c in all_calls:
-        if not c['outgoing']:
+        if c['platform'] != 'WhatsApp' and not c['outgoing']:
             inbound_from[c['name']] += 1
     biggest_fans = sorted(inbound_from.items(), key=lambda x: x[1], reverse=True)[:5]
     d['biggest_fans'] = biggest_fans
@@ -606,19 +631,17 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     long_calls = sum(1 for c in all_calls if c['answered'] and c['duration'] >= 900)
     d['duration_buckets'] = {'quick': quick_calls, 'normal': normal_calls, 'marathon': long_calls}
 
-    # Ghost protocol (missed calls you never returned)
-    # Build set of people you called (outgoing)
-    people_you_called = set()
+    # Ghost protocol (missed calls you never returned) - Phone/FaceTime only
+    # Build set of people you called (outgoing) - include all platforms for callback detection
     call_times_to = defaultdict(list)  # name -> list of outgoing call timestamps
     for c in all_calls:
-        if c['outgoing']:
-            people_you_called.add(c['name'])
+        if c['platform'] != 'WhatsApp' and c['outgoing']:
             call_times_to[c['name']].append(c['timestamp'])
 
-    # Find missed calls you never returned (or returned very late)
+    # Find missed calls you never returned (Phone/FaceTime only for incoming detection)
     ghosts = defaultdict(int)
     for c in all_calls:
-        if not c['outgoing'] and not c['answered']:
+        if c['platform'] != 'WhatsApp' and not c['outgoing'] and not c['answered']:
             # Check if you ever called them back after this
             later_calls = [t for t in call_times_to.get(c['name'], []) if t > c['timestamp']]
             if not later_calls:
@@ -626,10 +649,10 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     ghost_list = sorted(ghosts.items(), key=lambda x: x[1], reverse=True)[:5]
     d['ghosts'] = ghost_list
 
-    # Call back speed (avg time to return missed calls, in minutes)
+    # Call back speed (avg time to return missed calls, in minutes) - Phone/FaceTime only
     callback_times = []
     for c in all_calls:
-        if not c['outgoing'] and not c['answered']:
+        if c['platform'] != 'WhatsApp' and not c['outgoing'] and not c['answered']:
             # Find first outgoing call to this person after the missed call
             later_calls = [t for t in call_times_to.get(c['name'], []) if t > c['timestamp']]
             if later_calls:
@@ -688,9 +711,9 @@ def get_data_coverage(ts_start, ts_end, has_phone, has_whatsapp):
 
     if has_whatsapp:
         rows = q_whatsapp(f"""
-            SELECT MIN(ZFIRSTDATE + {MAC_EPOCH}), MAX(ZFIRSTDATE + {MAC_EPOCH})
-            FROM ZWAAGGREGATECALLEVENT
-            WHERE (ZFIRSTDATE + {MAC_EPOCH}) > {ts_start} AND (ZFIRSTDATE + {MAC_EPOCH}) < {ts_end}
+            SELECT MIN(ZDATE + {MAC_EPOCH}), MAX(ZDATE + {MAC_EPOCH})
+            FROM ZWACDCALLEVENT
+            WHERE (ZDATE + {MAC_EPOCH}) > {ts_start} AND (ZDATE + {MAC_EPOCH}) < {ts_end}
         """)
         if rows and rows[0][0]:
             if earliest is None or rows[0][0] < earliest:
