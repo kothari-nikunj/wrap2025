@@ -252,16 +252,22 @@ def analyze_whatsapp_calls(ts_start, ts_end, ts_jun, contacts):
     """Analyze WhatsApp call history."""
     calls = []
 
-    # Get WhatsApp contact names
-    wa_contacts = {}
+    # Get WhatsApp contact names from multiple sources
+    wa_contacts = {}  # JID -> name
     try:
         wa_msg_db = os.path.expanduser("~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite")
         if os.path.exists(wa_msg_db):
             conn = sqlite3.connect(wa_msg_db)
+            # Source 1: Push names (user's self-set display name)
             for row in conn.execute("SELECT ZJID, ZPUSHNAME FROM ZWAPROFILEPUSHNAME WHERE ZPUSHNAME IS NOT NULL"):
                 jid, name = row
                 if jid and name:
                     wa_contacts[jid] = name
+            # Source 2: Chat session partner names (your saved contact name - higher priority)
+            for row in conn.execute("SELECT ZCONTACTJID, ZPARTNERNAME FROM ZWACHATSESSION WHERE ZPARTNERNAME IS NOT NULL"):
+                jid, name = row
+                if jid and name and not name.startswith('+'):  # Skip if it's just a phone number
+                    wa_contacts[jid] = name  # Override push name with your contact name
             conn.close()
     except:
         pass
