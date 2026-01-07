@@ -421,14 +421,34 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         cs['platforms'].add(c['platform'])
         cs['names'].add(c['name'])
 
-    # Convert to contact_stats with best display name (longest name = most complete)
+    # Convert to contact_stats with best display name, MERGING entries with same name
     contact_stats = {}
     for key, stats in phone_stats.items():
         # Pick the longest name as display name (e.g., "Shimolee Kothari" > "Shimolee")
         best_name = max(stats['names'], key=len)
-        stats['platforms'] = list(stats['platforms'])
-        del stats['names']
-        contact_stats[best_name] = stats
+        platforms = list(stats['platforms'])
+
+        if best_name in contact_stats:
+            # Merge with existing entry
+            existing = contact_stats[best_name]
+            existing['count'] += stats['count']
+            existing['duration'] += stats['duration']
+            existing['outgoing'] += stats['outgoing']
+            existing['incoming'] += stats['incoming']
+            existing['answered'] += stats['answered']
+            existing['missed'] += stats['missed']
+            existing['platforms'] = list(set(existing['platforms']) | set(platforms))
+        else:
+            # New entry
+            contact_stats[best_name] = {
+                'count': stats['count'],
+                'duration': stats['duration'],
+                'outgoing': stats['outgoing'],
+                'incoming': stats['incoming'],
+                'answered': stats['answered'],
+                'missed': stats['missed'],
+                'platforms': platforms
+            }
 
     # Top 10 by call count
     top_by_count = sorted(contact_stats.items(), key=lambda x: x[1]['count'], reverse=True)[:10]
@@ -817,30 +837,40 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
         <div class="slide-watermark">wrap2025.com</div>
     </div>''')
 
-    # Slide 3: Platform breakdown
+    # Slide 3: Platform breakdown - horizontal stacked bar design
     if len(d['platforms']) > 1:
-        platform_bars = []
         total_calls = stats['total']
+        platform_data = []
+        bar_segments = []
+        platform_details = []
+
         for platform in ['Phone', 'FaceTime', 'WhatsApp']:
             if platform in d['platforms']:
                 pct = round(d['platforms'][platform]['count'] / max(total_calls, 1) * 100)
                 count = d['platforms'][platform]['count']
-                icon = '📱' if platform == 'Phone' else ('📹' if platform == 'FaceTime' else '💬')
-                css_class = 'phone' if platform == 'Phone' else ('facetime' if platform == 'FaceTime' else 'whatsapp')
-                platform_bars.append(f'''
-                <div class="platform-bar {css_class}" style="width:{max(pct, 15)}%">
-                    <span class="platform-icon">{icon}</span>
-                    <span class="platform-name">{platform}</span>
+                css_class = platform.lower()
+                platform_data.append((platform, pct, count, css_class))
+
+                # Stacked bar segment
+                bar_segments.append(f'<div class="bar-segment {css_class}" style="width:{pct}%"></div>')
+
+                # Detail card below
+                platform_details.append(f'''
+                <div class="platform-detail {css_class}">
                     <span class="platform-pct">{pct}%</span>
-                    <span class="platform-count">{count:,}</span>
+                    <span class="platform-name">{platform}</span>
+                    <span class="platform-count">{count:,} calls</span>
                 </div>''')
 
         slides.append(f'''
         <div class="slide platform-breakdown">
             <div class="slide-label">// PLATFORM SPLIT</div>
             <div class="slide-text">where you call the most</div>
-            <div class="platform-bars">
-                {''.join(platform_bars)}
+            <div class="stacked-bar">
+                {''.join(bar_segments)}
+            </div>
+            <div class="platform-details">
+                {''.join(platform_details)}
             </div>
             <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_platform_split.png', this)">📸 Save</button>
             <div class="slide-watermark">wrap2025.com</div>
@@ -1271,13 +1301,19 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
     # Final slide: Summary
     top3_names = ', '.join([name for name, _ in d['top_count'][:3]]) if d['top_count'] else "No contacts"
 
-    # Platform breakdown for summary
+    # Platform breakdown for summary - use colored indicators
     platform_summary = []
     for platform in ['Phone', 'FaceTime', 'WhatsApp']:
         if platform in d['platforms']:
-            icon = '📱' if platform == 'Phone' else ('📹' if platform == 'FaceTime' else '💬')
+            # Use colored dots/icons for cleaner look
+            if platform == 'Phone':
+                icon = '<span style="color:#4ade80">●</span>'
+            elif platform == 'FaceTime':
+                icon = '<span style="color:#22d3ee">●</span>'
+            else:  # WhatsApp
+                icon = '<span style="color:#25d366">●</span>'
             platform_summary.append(f'{icon} {d["platforms"][platform]["count"]:,}')
-    platform_summary_html = ' '.join(platform_summary)
+    platform_summary_html = ' &nbsp; '.join(platform_summary)
 
     slides.append(f'''
     <div class="slide summary-slide">
@@ -1430,19 +1466,23 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .contrib-stat-lbl {{ font-size:11px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:0.5px; }}
 .activity-note {{ font-size:11px; color:var(--yellow); margin-top:16px; opacity:0.85; }}
 
-/* Platform breakdown */
-.platform-bars {{ display:flex; flex-direction:column; gap:16px; width:100%; max-width:500px; margin:32px 0; }}
-.platform-bar {{ display:flex; align-items:center; gap:12px; padding:20px 24px; border-radius:16px; min-width:120px; transition:all 0.3s; }}
-.platform-bar.phone {{ background:linear-gradient(90deg, rgba(74,222,128,0.25), rgba(74,222,128,0.1)); border:2px solid rgba(74,222,128,0.4); }}
-.platform-bar.facetime {{ background:linear-gradient(90deg, rgba(34,211,238,0.25), rgba(34,211,238,0.1)); border:2px solid rgba(34,211,238,0.4); }}
-.platform-bar.whatsapp {{ background:linear-gradient(90deg, rgba(37,211,102,0.25), rgba(37,211,102,0.1)); border:2px solid rgba(37,211,102,0.4); }}
-.platform-icon {{ font-size:28px; flex-shrink:0; }}
-.platform-name {{ font-size:16px; text-align:left; flex-shrink:0; min-width:80px; }}
-.platform-pct {{ font-family:var(--font-mono); font-size:28px; font-weight:700; flex:1; text-align:center; }}
-.platform-bar.phone .platform-pct {{ color:var(--phone); }}
-.platform-bar.facetime .platform-pct {{ color:var(--facetime); }}
-.platform-bar.whatsapp .platform-pct {{ color:var(--whatsapp); }}
-.platform-count {{ font-family:var(--font-mono); font-size:16px; font-weight:500; opacity:0.8; flex-shrink:0; }}
+/* Platform breakdown - stacked bar design */
+.stacked-bar {{ display:flex; width:100%; max-width:400px; height:48px; border-radius:24px; overflow:hidden; margin:40px 0 32px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }}
+.bar-segment {{ height:100%; transition:all 0.3s; position:relative; }}
+.bar-segment.phone {{ background:linear-gradient(135deg, #4ade80, #22c55e); }}
+.bar-segment.facetime {{ background:linear-gradient(135deg, #22d3ee, #06b6d4); }}
+.bar-segment.whatsapp {{ background:linear-gradient(135deg, #25d366, #128c7e); }}
+.platform-details {{ display:flex; gap:24px; justify-content:center; margin-top:16px; }}
+.platform-detail {{ display:flex; flex-direction:column; align-items:center; padding:16px 20px; border-radius:12px; background:rgba(255,255,255,0.03); }}
+.platform-detail.phone {{ border-left:3px solid #4ade80; }}
+.platform-detail.facetime {{ border-left:3px solid #22d3ee; }}
+.platform-detail.whatsapp {{ border-left:3px solid #25d366; }}
+.platform-detail .platform-pct {{ font-family:var(--font-mono); font-size:32px; font-weight:700; }}
+.platform-detail.phone .platform-pct {{ color:#4ade80; }}
+.platform-detail.facetime .platform-pct {{ color:#22d3ee; }}
+.platform-detail.whatsapp .platform-pct {{ color:#25d366; }}
+.platform-detail .platform-name {{ font-size:14px; color:var(--muted); margin-top:4px; }}
+.platform-detail .platform-count {{ font-family:var(--font-mono); font-size:12px; color:var(--muted); margin-top:8px; opacity:0.7; }}
 
 /* Dual stats (video vs voice) */
 .dual-stats {{ display:flex; gap:48px; margin:32px 0; }}
@@ -1517,7 +1557,8 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .slide .summary-card,
 .slide .contrib-graph,
 .slide .contrib-stats,
-.slide .platform-bars,
+.slide .stacked-bar,
+.slide .platform-details,
 .slide .dual-stats,
 .slide .duration-buckets,
 .slide .personality-type {{
@@ -1557,7 +1598,9 @@ body {{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(
 .slide.active .contrib-stat:nth-child(1) {{ animation-delay: 0.5s; }}
 .slide.active .contrib-stat:nth-child(2) {{ animation-delay: 0.6s; }}
 .slide.active .contrib-stat:nth-child(3) {{ animation-delay: 0.7s; }}
-.slide.active .platform-bars {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
+.slide.active .stacked-bar {{ animation: barGrow 0.6s ease-out 0.2s forwards; }}
+.slide.active .platform-details {{ animation: textFade 0.5s ease-out 0.5s forwards; }}
+@keyframes barGrow {{ 0% {{ opacity: 0; transform: scaleX(0); }} 100% {{ opacity: 1; transform: scaleX(1); }} }}
 .slide.active .dual-stats {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
 .slide.active .duration-buckets {{ animation: textFade 0.5s ease-out 0.2s forwards; }}
 .slide.active .personality-type {{ animation: glitchReveal 0.8s ease-out 0.15s forwards; }}
