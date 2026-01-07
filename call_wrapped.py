@@ -335,30 +335,49 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
             name_normalize[name] = best_name
 
     # Step 2: Name-based fuzzy matching for contacts without phone numbers
-    # Only match if there's exactly ONE unambiguous target (e.g., "Shimolee" -> "Shimolee Kothari")
-    # Skip if ambiguous (e.g., "John" with both "John Smith" and "John Doe" present)
-    all_names = set(c['name'] for c in all_calls)
+    # Match "Shimolee" -> "Shimolee Kothari" when unambiguous
+    all_names = set(c['name'].strip() for c in all_calls)
     normalized_names = set(name_normalize.values())
     all_target_names = all_names | normalized_names
+
+    # Build first-name index for reverse lookup
+    first_name_to_full = {}
+    for full_name in all_target_names:
+        parts = full_name.strip().split()
+        if len(parts) >= 2:
+            first = parts[0].lower()
+            if first not in first_name_to_full:
+                first_name_to_full[first] = []
+            first_name_to_full[first].append(full_name)
 
     for name in all_names:
         if name in name_normalize:
             continue  # Already normalized via phone
-        # Find ALL possible matches (names that start with this name + space)
-        name_lower = name.lower()
+        name_clean = name.strip()
+        name_lower = name_clean.lower()
+
+        # Method 1: Check if any full name starts with this name + space
         matches = []
         for target in all_target_names:
-            target_lower = target.lower()
-            # Match if target starts with name followed by space
-            if target_lower.startswith(name_lower + ' ') and len(target) > len(name):
-                matches.append(target)
+            target_clean = target.strip()
+            target_lower = target_clean.lower()
+            if target_lower.startswith(name_lower + ' ') and len(target_clean) > len(name_clean):
+                matches.append(target_clean)
+
+        # Method 2: If name is a single word, check first-name index
+        if not matches and ' ' not in name_clean:
+            candidates = first_name_to_full.get(name_lower, [])
+            # Only use if there's exactly one full name with this first name
+            if len(candidates) == 1 and candidates[0] != name_clean:
+                matches = candidates
+
         # Only use the match if there's exactly ONE (unambiguous)
         if len(matches) == 1:
             name_normalize[name] = matches[0]
 
     # Normalize all call names for consistent analytics
     for c in all_calls:
-        c['name'] = name_normalize.get(c['name'], c['name'])
+        c['name'] = name_normalize.get(c['name'].strip(), c['name'].strip())
 
     d = {}
 
