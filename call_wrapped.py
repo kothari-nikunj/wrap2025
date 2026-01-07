@@ -1007,54 +1007,6 @@ def gen_html(d, path, year, has_phone, has_whatsapp, earliest_date, latest_date)
             <div class="slide-watermark">wrap2025.com</div>
         </div>''')
 
-    # Slide 14: Call Avoiders
-    if d['avoiders']:
-        avoider_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">🚫</span><span class="rank-name">{name}</span><span class="rank-count red">{missed}/{total}</span></div>'
-            for name, missed, total in d['avoiders'][:5]
-        ])
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// CALL AVOIDERS</div>
-            <div class="slide-text">people who don't pick up</div>
-            <div class="rank-list">{avoider_html}</div>
-            <div class="roast" style="margin-top:16px;">missed / total attempts</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_avoiders.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
-    # Slide 15: Speed Dialers (shortest calls)
-    if d['speed_dialers']:
-        speed_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">⚡</span><span class="rank-name">{name}</span><span class="rank-count cyan">{format_duration_short(avg)}</span></div>'
-            for name, avg, count in d['speed_dialers'][:5]
-        ])
-        slides.append(f'''
-        <div class="slide">
-            <div class="slide-label">// SPEED DIALERS</div>
-            <div class="slide-text">shortest average calls</div>
-            <div class="rank-list">{speed_html}</div>
-            <div class="roast" style="margin-top:16px;">straight to the point</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_speed_dialers.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
-    # Slide 16: Marathon Talkers (longest avg calls)
-    if d['marathon_talkers']:
-        marathon_html = ''.join([
-            f'<div class="rank-item"><span class="rank-num">🗣️</span><span class="rank-name">{name}</span><span class="rank-count yellow">{format_duration_short(avg)}</span></div>'
-            for name, avg, count in d['marathon_talkers'][:5]
-        ])
-        slides.append(f'''
-        <div class="slide orange-bg">
-            <div class="slide-label">// MARATHON TALKERS</div>
-            <div class="slide-text">longest average calls</div>
-            <div class="rank-list">{marathon_html}</div>
-            <div class="roast" style="margin-top:16px;">they never want to hang up</div>
-            <button class="slide-save-btn" onclick="saveSlide(this.parentElement, 'wrapped_marathon_talkers.png', this)">📸 Save</button>
-            <div class="slide-watermark">wrap2025.com</div>
-        </div>''')
-
     # Slide: First Call of the Year
     if d['first_call']:
         fc = d['first_call']
