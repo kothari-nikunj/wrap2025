@@ -339,13 +339,15 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     voice_calls = total_calls - video_calls
     d['video_voice'] = {'video': video_calls, 'voice': voice_calls}
 
-    # Top contacts by call count
-    contact_stats = defaultdict(lambda: {
+    # Top contacts by call count - key by phone number to deduplicate
+    phone_stats = defaultdict(lambda: {
         'count': 0, 'duration': 0, 'outgoing': 0, 'incoming': 0,
-        'answered': 0, 'missed': 0, 'platforms': set()
+        'answered': 0, 'missed': 0, 'platforms': set(), 'names': set()
     })
     for c in all_calls:
-        cs = contact_stats[c['name']]
+        # Use phone number as key for deduplication, fall back to name
+        key = c['phone'] if c['phone'] else c['name']
+        cs = phone_stats[key]
         cs['count'] += 1
         cs['duration'] += c['duration']
         cs['outgoing'] += 1 if c['outgoing'] else 0
@@ -353,10 +355,16 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
         cs['answered'] += 1 if c['answered'] else 0
         cs['missed'] += 0 if c['answered'] else 1
         cs['platforms'].add(c['platform'])
+        cs['names'].add(c['name'])
 
-    # Convert sets to lists for JSON serialization
-    for name in contact_stats:
-        contact_stats[name]['platforms'] = list(contact_stats[name]['platforms'])
+    # Convert to contact_stats with best display name (longest name = most complete)
+    contact_stats = {}
+    for key, stats in phone_stats.items():
+        # Pick the longest name as display name (e.g., "Shimolee Kothari" > "Shimolee")
+        best_name = max(stats['names'], key=len)
+        stats['platforms'] = list(stats['platforms'])
+        del stats['names']
+        contact_stats[best_name] = stats
 
     # Top 10 by call count
     top_by_count = sorted(contact_stats.items(), key=lambda x: x[1]['count'], reverse=True)[:10]
