@@ -335,7 +335,8 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
             name_normalize[name] = best_name
 
     # Step 2: Name-based fuzzy matching for contacts without phone numbers
-    # If "Shimolee" appears and "Shimolee Kothari" exists, merge them
+    # Only match if there's exactly ONE unambiguous target (e.g., "Shimolee" -> "Shimolee Kothari")
+    # Skip if ambiguous (e.g., "John" with both "John Smith" and "John Doe" present)
     all_names = set(c['name'] for c in all_calls)
     normalized_names = set(name_normalize.values())
     all_target_names = all_names | normalized_names
@@ -343,18 +344,17 @@ def analyze_calls(phone_calls, whatsapp_calls, ts_start, ts_end, ts_jun):
     for name in all_names:
         if name in name_normalize:
             continue  # Already normalized via phone
-        # Look for a longer name that starts with this name (first name match)
+        # Find ALL possible matches (names that start with this name + space)
         name_lower = name.lower()
+        matches = []
         for target in all_target_names:
             target_lower = target.lower()
-            # Match if target starts with name followed by space (e.g., "Shimolee" -> "Shimolee Kothari")
+            # Match if target starts with name followed by space
             if target_lower.startswith(name_lower + ' ') and len(target) > len(name):
-                name_normalize[name] = target
-                break
-            # Also match first name from full name (e.g., if only first name in one source)
-            if name_lower == target_lower.split()[0] and len(target) > len(name):
-                name_normalize[name] = target
-                break
+                matches.append(target)
+        # Only use the match if there's exactly ONE (unambiguous)
+        if len(matches) == 1:
+            name_normalize[name] = matches[0]
 
     # Normalize all call names for consistent analytics
     for c in all_calls:
